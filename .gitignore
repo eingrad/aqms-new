@@ -1,0 +1,26 @@
+# secrets & local state — never commit
+.env
+*.env
+!*.env.example
+config.yaml
+ingest/config.yaml
+logger/config.yaml
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# certs/keys
+*.pem
+*.key
+*.crt
+!*.example.*

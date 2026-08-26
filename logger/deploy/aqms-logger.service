@@ -1,0 +1,19 @@
+# systemd unit for the station logger (Linux edge box).
+# Install: copy to /etc/systemd/system/, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now aqms-logger
+[Unit]
+Description=AQMS station logger (Modbus -> SQLite -> MQTT)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aqms
+WorkingDirectory=/opt/aqms/logger
+ExecStart=/opt/aqms/logger/.venv/bin/python -m aqms_logger.main --config /opt/aqms/logger/config.yaml
+Restart=always
+RestartSec=5
+# secrets are read from /opt/aqms/logger/.env (loaded by the app)
+
+[Install]
+WantedBy=multi-user.target

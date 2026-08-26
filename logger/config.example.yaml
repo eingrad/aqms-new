@@ -1,0 +1,85 @@
+# AQMS station logger configuration.
+# Copy to config.yaml and edit. Secrets come from .env via ${VAR} placeholders.
+
+station_id: TNBJ-AQMS1
+poll_interval_seconds: 60      # sampling cadence; readings are minute-aligned (UTC)
+sqlite_path: aqms_logger.db    # local store #1 (also the store-and-forward buffer)
+retention_days: 30             # prune SYNCED rows older than this from SQLite
+
+mqtt:
+  host: ${MQTT_HOST}
+  port: ${MQTT_PORT}
+  username: ${MQTT_USERNAME}
+  password: ${MQTT_PASSWORD}
+  tls_ca: ${MQTT_TLS_CA}       # server broker uses TLS + auth
+  tls_cert: ${MQTT_TLS_CERT}   # optional (mTLS)
+  tls_key: ${MQTT_TLS_KEY}     # optional (mTLS)
+  base_topic: aqms             # publishes to  aqms/<station_id>/readings
+  qos: 1
+  client_id: aqms-logger-TNBJ-AQMS1
+
+devices:
+  # ---------------------------------------------------------------------------
+  # Fidas 200 — Modbus-TCP. Values are 32-bit IEEE-754 floats (2 input registers
+  # each, function code 04). PM values are reported in mg/m3 → scaled ×1000 to ug/m3.
+  # Register addresses are from the Palas "Modbus Protocol" doc (FW >=1.0.0.435).
+  #
+  # word_order: verify ONCE against the Fidas display. Default ABCD (big-endian);
+  # if values look wrong/byte-swapped, try CDAB (word swap), then BADC / DCBA.
+  # ---------------------------------------------------------------------------
+  - name: fidas200
+    type: modbus_tcp
+    host: 10.0.0.50            # <-- set the Fidas IP
+    port: 502
+    unit_id: 1                 # <-- confirm the Modbus slave/unit id
+    timeout: 2.0               # Palas recommends a 2000 ms timeout
+    retries: 3                 # ...and retry >=3x on timeout
+    word_order: ABCD           # device default; can be overridden per register
+    registers:
+      - { parameter: Cn,      address: 37, count: 2, type: float32, function: input, unit: "P/cm3" }
+      - { parameter: PM1,     address: 39, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
+      - { parameter: PM2_5,   address: 41, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
+      - { parameter: PM4,     address: 43, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
+      - { parameter: PM10,    address: 45, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
+      - { parameter: TSP,     address: 47, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }  # PMtotal
+      - { parameter: TEMP,    address: 49, count: 2, type: float32, function: input, unit: "degC" }
+      - { parameter: PRESSURE, address: 51, count: 2, type: float32, function: input, unit: "hPa" }
+      - { parameter: HUMIDITY, address: 53, count: 2, type: float32, function: input, unit: "%" }
+      - { parameter: WSP,     address: 61, count: 2, type: float32, function: input, unit: "km/h" }   # ×0.27778 for m/s
+      - { parameter: WDIR,    address: 63, count: 2, type: float32, function: input, unit: "deg" }
+      - { parameter: PRECIP,  address: 65, count: 2, type: float32, function: input, unit: "l/m2/h" }
+      # status word (bit-flags) — read as raw uint16 if you want to log it:
+      # - { parameter: STATUS, address: 67, count: 1, type: uint16, function: input, unit: "" }
+
+  # ---------------------------------------------------------------------------
+  # FPI gases (O3/SO2/CO/NOx) — PHASE 5, Option A. Reads FPI's AQMS-Plus MySQL.
+  # Adapter is built and unit-tested; UNCOMMENT and fill the real schema values
+  # once `Test-NetConnection <DAS_IP> -Port 3306` succeeds and the DAS tables are
+  # inspected. table / time_column / columns below are PLACEHOLDER names.
+  # ---------------------------------------------------------------------------
+  # - name: fpi_gases
+  #   type: fpi_mysql
+  #   options:
+  #     host: ${FPI_MYSQL_HOST}
+  #     port: ${FPI_MYSQL_PORT}
+  #     database: ${FPI_MYSQL_DB}
+  #     user: ${FPI_MYSQL_USER}
+  #     password: ${FPI_MYSQL_PASSWORD}
+  #     table: realtime_data           # <-- real DAS table name
+  #     time_column: data_time         # <-- its timestamp column
+  #     device_time_is_utc: false      # DAS timestamps are usually LOCAL time
+  #     max_age_seconds: 120           # a DAS row older than this -> comm-fail
+  #     columns:                       # parameter: db_column  (confirm 300/400/500/600 mapping)
+  #       O3:  o3_conc
+  #       SO2: so2_conc
+  #       CO:  co_conc
+  #       NOX: nox_conc
+  #       NO:  no_conc
+  #       NO2: no2_conc
+  #     units:
+  #       O3: ug/m3
+  #       SO2: ug/m3
+  #       CO: mg/m3
+  #       NOX: ug/m3
+  #       NO: ug/m3
+  #       NO2: ug/m3

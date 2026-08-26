@@ -1,0 +1,16 @@
+# AQMS server ingest configuration. Copy to config.yaml. Secrets from .env via ${VAR}.
+
+timescaledb:
+  dsn: ${TSDB_DSN}
+
+mqtt:
+  host: ${MQTT_HOST}
+  port: ${MQTT_PORT}
+  username: ${MQTT_USERNAME}
+  password: ${MQTT_PASSWORD}
+  tls_ca: ${MQTT_TLS_CA}
+  tls_cert: ${MQTT_TLS_CERT}
+  tls_key: ${MQTT_TLS_KEY}
+  topic: aqms/+/readings        # subscribe to every station
+  qos: 1
+  client_id: aqms-ingest

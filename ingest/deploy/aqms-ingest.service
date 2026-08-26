@@ -1,0 +1,19 @@
+# systemd unit for the server ingest service.
+# Install: copy to /etc/systemd/system/, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now aqms-ingest
+[Unit]
+Description=AQMS ingest (MQTT -> TimescaleDB)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aqms
+WorkingDirectory=/opt/aqms/ingest
+ExecStart=/opt/aqms/ingest/.venv/bin/python -m aqms_ingest.main --config /opt/aqms/ingest/config.yaml
+Restart=always
+RestartSec=5
+# secrets (DB DSN, MQTT creds) are read from /opt/aqms/ingest/.env
+
+[Install]
+WantedBy=multi-user.target
