@@ -27,11 +27,13 @@ devices:
   # word_order: verify ONCE against the Fidas display. Default ABCD (big-endian);
   # if values look wrong/byte-swapped, try CDAB (word swap), then BADC / DCBA.
   # ---------------------------------------------------------------------------
+  # NOTE: on the Fidas "3rd party protocols" screen, set  Modbus modus: TCP
+  # (it ships as RTU/serial). TCP is inactive until you switch it — port 502 then serves.
   - name: fidas200
     type: modbus_tcp
-    host: 10.0.0.50            # <-- set the Fidas IP
+    host: 192.168.13.123       # Fidas IP seen on-device: 192.168.13.123 (lan) or 172.22.132.254; use the one the logger PC can reach
     port: 502
-    unit_id: 1                 # <-- confirm the Modbus slave/unit id
+    unit_id: 0                 # Fidas "Modbus address" = 0 (from the device screen)
     timeout: 2.0               # Palas recommends a 2000 ms timeout
     retries: 3                 # ...and retry >=3x on timeout
     word_order: ABCD           # device default; can be overridden per register

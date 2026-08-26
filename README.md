@@ -41,6 +41,12 @@ cp .env.example .env                              # put real MQTT/DB secrets her
 python -m aqms_logger.main --config config.yaml
 ```
 
+**Commissioning the Fidas** — follow [docs/commissioning-fidas.md](docs/commissioning-fidas.md). Two helpers:
+```bash
+python -m aqms_logger.probe --host <FIDAS_IP> --port 502 --unit 1   # find the float word order
+python -m aqms_logger.main --config config.yaml --once --no-mqtt    # verify decoding, SQLite only
+```
+
 ## Quick start (ingest, on the server)
 ```bash
 cd ingest
