@@ -60,5 +60,27 @@ SELECT
     unit
 FROM readings_hourly;
 
+-- Convenience wide view: one row per minute per station, parameters as columns
+-- (old-system layout) on top of the long storage. Add columns as new parameters arrive.
+CREATE OR REPLACE VIEW readings_wide AS
+SELECT
+    time,
+    (time AT TIME ZONE 'Asia/Kuala_Lumpur') AS time_myt,
+    station_id,
+    max(value) FILTER (WHERE parameter = 'Cn')       AS "Cn",
+    max(value) FILTER (WHERE parameter = 'PM1')      AS "PM1",
+    max(value) FILTER (WHERE parameter = 'PM2_5')    AS "PM2_5",
+    max(value) FILTER (WHERE parameter = 'PM4')      AS "PM4",
+    max(value) FILTER (WHERE parameter = 'PM10')     AS "PM10",
+    max(value) FILTER (WHERE parameter = 'TSP')      AS "TSP",
+    max(value) FILTER (WHERE parameter = 'TEMP')     AS "TEMP",
+    max(value) FILTER (WHERE parameter = 'PRESSURE') AS "PRESSURE",
+    max(value) FILTER (WHERE parameter = 'HUMIDITY') AS "HUMIDITY",
+    max(value) FILTER (WHERE parameter = 'WSP')      AS "WSP",
+    max(value) FILTER (WHERE parameter = 'WDIR')     AS "WDIR",
+    max(value) FILTER (WHERE parameter = 'PRECIP')   AS "PRECIP"
+FROM readings
+GROUP BY time, station_id;
+
 -- Optional: drop raw data older than a year (hourly aggregate is retained).
 -- SELECT add_retention_policy('readings', INTERVAL '365 days', if_not_exists => TRUE);

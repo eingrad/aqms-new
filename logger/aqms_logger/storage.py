@@ -25,6 +25,28 @@ CREATE TABLE IF NOT EXISTS readings (
     UNIQUE(time, device, parameter)
 );
 CREATE INDEX IF NOT EXISTS idx_readings_unsynced ON readings(time) WHERE synced = 0;
+
+-- Convenience wide view: one row per minute, each parameter as a column (old-system layout).
+-- Storage stays long; this is just a view. Add columns here when new parameters (e.g. FPI gases) arrive.
+CREATE VIEW IF NOT EXISTS readings_wide AS
+SELECT
+    time,
+    datetime(time, '+8 hours') AS time_myt,     -- Malaysia (UTC+8) for convenience
+    station_id,
+    MAX(CASE WHEN parameter='Cn'       THEN value END) AS Cn,
+    MAX(CASE WHEN parameter='PM1'      THEN value END) AS PM1,
+    MAX(CASE WHEN parameter='PM2_5'    THEN value END) AS PM2_5,
+    MAX(CASE WHEN parameter='PM4'      THEN value END) AS PM4,
+    MAX(CASE WHEN parameter='PM10'     THEN value END) AS PM10,
+    MAX(CASE WHEN parameter='TSP'      THEN value END) AS TSP,
+    MAX(CASE WHEN parameter='TEMP'     THEN value END) AS TEMP,
+    MAX(CASE WHEN parameter='PRESSURE' THEN value END) AS PRESSURE,
+    MAX(CASE WHEN parameter='HUMIDITY' THEN value END) AS HUMIDITY,
+    MAX(CASE WHEN parameter='WSP'      THEN value END) AS WSP,
+    MAX(CASE WHEN parameter='WDIR'     THEN value END) AS WDIR,
+    MAX(CASE WHEN parameter='PRECIP'   THEN value END) AS PRECIP
+FROM readings
+GROUP BY time, station_id;
 """
 
 
