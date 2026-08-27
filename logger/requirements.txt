@@ -2,5 +2,6 @@ pymodbus>=3.6,<4.0
 paho-mqtt>=2.0,<3.0
 PyYAML>=6.0
 python-dotenv>=1.0
+redis>=5.0            # live cache for the dashboard
 # Only needed when the fpi_mysql adapter is enabled (imported lazily):
 PyMySQL>=1.1

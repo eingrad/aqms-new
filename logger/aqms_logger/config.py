@@ -38,6 +38,7 @@ class RegisterSpec:
     scale: float = 1.0
     offset: float = 0.0
     unit: str = ""
+    average: str = "mean"            # mean | circular (circular for angular params like WDIR)
 
 
 @dataclass
@@ -69,17 +70,35 @@ class MqttConfig:
 
 
 @dataclass
+class RedisConfig:
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 6379
+    db: int = 0
+    password: str = ""
+    key_template: str = "aqms:{station_id}:live"   # {station_id} is substituted
+    ttl_seconds: int = 120                          # key expiry = dashboard freshness signal
+    fields: dict = field(default_factory=dict)      # optional param -> dashboard field-name map
+
+
+@dataclass
 class LoggerConfig:
     station_id: str
     mqtt: MqttConfig
     devices: list[DeviceConfig]
     poll_interval_seconds: int = 60
+    sample_interval_seconds: int = 5               # sub-minute sampling; averaged into the stored minute
     sqlite_path: str = "aqms_logger.db"
     retention_days: int = 30
+    redis: RedisConfig = field(default_factory=RedisConfig)
 
     @property
     def topic(self) -> str:
         return f"{self.mqtt.base_topic}/{self.station_id}/readings"
+
+    @property
+    def circular_params(self) -> set[str]:
+        return {r.parameter for d in self.devices for r in d.registers if r.average == "circular"}
 
 
 def load_config(path: str) -> LoggerConfig:
@@ -96,11 +115,16 @@ def load_config(path: str) -> LoggerConfig:
         regs = [RegisterSpec(**r) for r in d.pop("registers", [])]
         devices.append(DeviceConfig(registers=regs, **d))
 
+    redis_raw = raw.get("redis")
+    redis_cfg = RedisConfig(**redis_raw) if redis_raw else RedisConfig()
+
     return LoggerConfig(
         station_id=raw["station_id"],
         mqtt=mqtt,
         devices=devices,
         poll_interval_seconds=int(raw.get("poll_interval_seconds", 60)),
+        sample_interval_seconds=int(raw.get("sample_interval_seconds", 5)),
         sqlite_path=raw.get("sqlite_path", "aqms_logger.db"),
         retention_days=int(raw.get("retention_days", 30)),
+        redis=redis_cfg,
     )

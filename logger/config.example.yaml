@@ -2,7 +2,8 @@
 # Copy to config.yaml and edit. Secrets come from .env via ${VAR} placeholders.
 
 station_id: TNBJ-AQMS1
-poll_interval_seconds: 60      # sampling cadence; readings are minute-aligned (UTC)
+sample_interval_seconds: 5     # how often to sample within each minute (averaged into the stored value)
+poll_interval_seconds: 60      # store/publish cadence: one AVERAGED row per minute (UTC)
 sqlite_path: aqms_logger.db    # local store #1 (also the store-and-forward buffer)
 retention_days: 30             # prune SYNCED rows older than this from SQLite
 
@@ -17,6 +18,22 @@ mqtt:
   base_topic: aqms             # publishes to  aqms/<station_id>/readings
   qos: 1
   client_id: aqms-logger-TNBJ-AQMS1
+
+# Redis live cache — the dashboard GETs this key every ~10s for its live section.
+# The logger writes one JSON value per minute with a TTL (expiry = freshness signal).
+redis:
+  enabled: true
+  host: 127.0.0.1              # <-- your Redis host
+  port: 6379
+  db: 0
+  password: ""                 # or ${REDIS_PASSWORD}
+  key_template: "aqms:{station_id}:live"   # dashboard reads this exact key
+  ttl_seconds: 120             # > 60 so it survives between minute writes; expires ~2 min after logger stops
+  # Optional: map internal names -> the dashboard's expected JSON field names.
+  # fields:
+  #   PM2_5: pm25
+  #   PM10: pm10
+  #   TEMP: temperature
 
 devices:
   # ---------------------------------------------------------------------------
@@ -48,7 +65,7 @@ devices:
       - { parameter: PRESSURE, address: 51, count: 2, type: float32, function: input, unit: "hPa" }
       - { parameter: HUMIDITY, address: 53, count: 2, type: float32, function: input, unit: "%" }
       - { parameter: WSP,     address: 61, count: 2, type: float32, function: input, unit: "km/h" }   # ×0.27778 for m/s
-      - { parameter: WDIR,    address: 63, count: 2, type: float32, function: input, unit: "deg" }
+      - { parameter: WDIR,    address: 63, count: 2, type: float32, function: input, unit: "deg", average: circular }  # angular mean
       - { parameter: PRECIP,  address: 65, count: 2, type: float32, function: input, unit: "l/m2/h" }
       # status word (bit-flags) — read as raw uint16 if you want to log it:
       # - { parameter: STATUS, address: 67, count: 1, type: uint16, function: input, unit: "" }
