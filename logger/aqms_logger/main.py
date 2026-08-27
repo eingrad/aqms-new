@@ -18,6 +18,22 @@ log = logging.getLogger("aqms_logger")
 _running = True
 
 
+def _configured_parameters(devices) -> list[str]:
+    """All parameter names across configured devices (for wide-table columns)."""
+    params: list[str] = []
+    for d in devices:
+        params += [r.parameter for r in d.registers]
+        if d.type == "fpi_mysql":
+            params += list(d.options.get("columns", {}).keys())
+    # de-duplicate, preserve order
+    seen, ordered = set(), []
+    for p in params:
+        if p not in seen:
+            seen.add(p)
+            ordered.append(p)
+    return ordered
+
+
 def _handle_signal(signum, frame):
     global _running
     log.info("signal %s received; shutting down after this cycle", signum)
@@ -49,6 +65,7 @@ def run(config_path: str, once: bool = False, no_mqtt: bool = False) -> None:
     log.info("station=%s devices=%d interval=%ss", cfg.station_id, len(cfg.devices), cfg.poll_interval_seconds)
 
     storage = Storage(cfg.sqlite_path)
+    storage.ensure_param_columns(_configured_parameters(cfg.devices))
 
     adapters = []
     for device in cfg.devices:

@@ -1,39 +1,42 @@
-"""Store-and-forward: publish unsynced SQLite rows to MQTT, oldest first.
+"""Store-and-forward: publish unsynced wide rows to MQTT, oldest first.
 
-One MQTT message per timestamp carries all of that minute's readings. On a
-successful (acknowledged) publish the timestamp's rows are marked synced. When
-the broker is down, rows accumulate and are replayed in order on the next flush.
+Each MQTT message carries one timestamp's wide row as a `values` map
+{parameter: value}. On a successful (acknowledged) publish the row is marked
+synced. When the broker is down, rows accumulate and replay in order.
 """
 from __future__ import annotations
 
 import logging
 
 from .mqtt_publisher import MqttPublisher
-from .storage import Storage
+from .storage import BASE_COLUMNS, Storage
 
 log = logging.getLogger(__name__)
 
 
+def _row_to_payload(row: dict) -> dict:
+    values = {k: v for k, v in row.items() if k not in BASE_COLUMNS and v is not None}
+    return {"station_id": row["station_id"], "ts": row["time"], "values": values}
+
+
 def flush(storage: Storage, publisher: MqttPublisher, topic: str,
-          max_timestamps: int = 240) -> int:
-    """Publish pending timestamps; return how many were acknowledged and marked synced."""
+          max_rows: int = 240) -> int:
+    """Publish pending rows; return how many were acknowledged and marked synced."""
     if not publisher.connected:
         pending = storage.count_unsynced()
         if pending:
-            log.info("broker offline; %d readings buffered locally", pending)
+            log.info("broker offline; %d rows buffered locally", pending)
         return 0
 
     sent = 0
-    for iso_time, station_id, readings in storage.fetch_unsynced_grouped(max_timestamps):
-        payload = {"station_id": station_id, "ts": iso_time, "readings": readings}
-        if publisher.publish_json(topic, payload):
-            storage.mark_synced(iso_time)
+    for row in storage.fetch_unsynced(max_rows):
+        if publisher.publish_json(topic, _row_to_payload(row)):
+            storage.mark_synced(row["time"], row["station_id"])
             sent += 1
         else:
-            # Stop on first failure; preserve order and retry next cycle.
-            log.warning("publish failed at %s; will retry", iso_time)
+            log.warning("publish failed at %s; will retry", row["time"])
             break
 
     if sent:
-        log.info("forwarded %d timestamp(s) to %s", sent, topic)
+        log.info("forwarded %d row(s) to %s", sent, topic)
     return sent

@@ -1,8 +1,12 @@
-"""SQLite storage — the local copy (#1) and the store-and-forward buffer.
+"""SQLite storage — WIDE table (one row per timestamp, a column per parameter).
 
-Rows are inserted with synced=0. After a reading is acknowledged by the broker
-it is marked synced=1. If the network is down, unsynced rows accumulate and are
-replayed in timestamp order when connectivity returns (backfill).
+The table is `readings(time, station_id, synced, created_at, <param columns...>)`.
+Parameter columns are created automatically from the configured parameters
+(`ensure_param_columns`), so the physical table is wide (like the old ASMA_RAWDATA)
+while still not requiring a manual schema edit when a parameter is added.
+
+An invalid/comm-fail reading is stored as NULL in its column (so a gap is explicit;
+NULLs are ignored by AVG and don't count toward hourly completeness).
 """
 from __future__ import annotations
 
@@ -11,42 +15,17 @@ from datetime import datetime, timedelta, timezone
 
 from .models import Reading
 
+BASE_COLUMNS = {"time", "station_id", "synced", "created_at"}
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS readings (
     time        TEXT    NOT NULL,               -- ISO-8601 UTC, e.g. 2026-08-24T10:30:00Z
     station_id  TEXT    NOT NULL,
-    device      TEXT    NOT NULL,
-    parameter   TEXT    NOT NULL,
-    value       REAL,                            -- NULL when status != valid
-    unit        TEXT,
-    status      INTEGER NOT NULL DEFAULT 0,
     synced      INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    UNIQUE(time, device, parameter)
+    PRIMARY KEY (time, station_id)
 );
 CREATE INDEX IF NOT EXISTS idx_readings_unsynced ON readings(time) WHERE synced = 0;
-
--- Convenience wide view: one row per minute, each parameter as a column (old-system layout).
--- Storage stays long; this is just a view. Add columns here when new parameters (e.g. FPI gases) arrive.
-CREATE VIEW IF NOT EXISTS readings_wide AS
-SELECT
-    time,
-    datetime(time, '+8 hours') AS time_myt,     -- Malaysia (UTC+8) for convenience
-    station_id,
-    MAX(CASE WHEN parameter='Cn'       THEN value END) AS Cn,
-    MAX(CASE WHEN parameter='PM1'      THEN value END) AS PM1,
-    MAX(CASE WHEN parameter='PM2_5'    THEN value END) AS PM2_5,
-    MAX(CASE WHEN parameter='PM4'      THEN value END) AS PM4,
-    MAX(CASE WHEN parameter='PM10'     THEN value END) AS PM10,
-    MAX(CASE WHEN parameter='TSP'      THEN value END) AS TSP,
-    MAX(CASE WHEN parameter='TEMP'     THEN value END) AS TEMP,
-    MAX(CASE WHEN parameter='PRESSURE' THEN value END) AS PRESSURE,
-    MAX(CASE WHEN parameter='HUMIDITY' THEN value END) AS HUMIDITY,
-    MAX(CASE WHEN parameter='WSP'      THEN value END) AS WSP,
-    MAX(CASE WHEN parameter='WDIR'     THEN value END) AS WDIR,
-    MAX(CASE WHEN parameter='PRECIP'   THEN value END) AS PRECIP
-FROM readings
-GROUP BY time, station_id;
 """
 
 
@@ -56,7 +35,6 @@ def _iso(ts: datetime) -> str:
 
 class Storage:
     def __init__(self, path: str):
-        # check_same_thread=False so the paho network thread may also touch it if needed.
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL;")
@@ -64,52 +42,57 @@ class Storage:
         self.conn.executescript(_SCHEMA)
         self.conn.commit()
 
-    def insert_readings(self, readings: list[Reading]) -> int:
-        """Insert readings; duplicates on (time, device, parameter) are ignored."""
-        rows = [
-            (_iso(r.time), r.station_id, r.device, r.parameter, r.value, r.unit, r.status)
-            for r in readings
-        ]
-        cur = self.conn.executemany(
-            "INSERT OR IGNORE INTO readings(time, station_id, device, parameter, value, unit, status) "
-            "VALUES(?,?,?,?,?,?,?)",
-            rows,
-        )
+    def _columns(self) -> set[str]:
+        return {row["name"] for row in self.conn.execute("PRAGMA table_info(readings)")}
+
+    def ensure_param_columns(self, parameters) -> None:
+        """Add a REAL column for each parameter that doesn't have one yet."""
+        existing = self._columns()
+        for p in parameters:
+            if p not in existing:
+                self.conn.execute(f'ALTER TABLE readings ADD COLUMN "{p}" REAL')
+                existing.add(p)
         self.conn.commit()
-        return cur.rowcount
 
-    def fetch_unsynced_grouped(self, max_timestamps: int = 240) -> list[tuple[str, str, list[dict]]]:
-        """Return unsynced rows grouped by timestamp, oldest first.
+    def param_columns(self) -> list[str]:
+        return [c for c in self._columns() if c not in BASE_COLUMNS]
 
-        Each item is (iso_time, station_id, [reading-dicts]). Limited to
-        `max_timestamps` distinct timestamps per call to bound a single flush.
-        """
-        times = [
-            row["time"]
-            for row in self.conn.execute(
-                "SELECT DISTINCT time FROM readings WHERE synced = 0 ORDER BY time ASC LIMIT ?",
-                (max_timestamps,),
+    def insert_readings(self, readings: list[Reading]) -> int:
+        """Upsert readings into one wide row per (time, station_id). Returns rows touched."""
+        groups: dict[tuple[str, str], dict[str, float | None]] = {}
+        for r in readings:
+            groups.setdefault((_iso(r.time), r.station_id), {})[r.parameter] = r.value
+
+        touched = 0
+        for (t, sid), vals in groups.items():
+            cols = list(vals.keys())
+            collist = ",".join(f'"{c}"' for c in cols)
+            placeholders = ",".join("?" for _ in cols)
+            updates = ",".join(f'"{c}"=excluded."{c}"' for c in cols)
+            sql = (
+                f"INSERT INTO readings(time, station_id, synced{',' + collist if cols else ''}) "
+                f"VALUES(?,?,0{',' + placeholders if cols else ''}) "
+                f"ON CONFLICT(time, station_id) DO UPDATE SET {updates}{',' if updates else ''} synced=0"
+                if cols else
+                "INSERT OR IGNORE INTO readings(time, station_id, synced) VALUES(?,?,0)"
             )
-        ]
-        groups: list[tuple[str, str, list[dict]]] = []
-        for t in times:
-            cur = self.conn.execute(
-                "SELECT station_id, device, parameter, value, unit, status "
-                "FROM readings WHERE synced = 0 AND time = ?",
-                (t,),
-            )
-            items = [dict(r) for r in cur]
-            station_id = items[0]["station_id"] if items else ""
-            readings = [
-                {k: it[k] for k in ("device", "parameter", "value", "unit", "status")}
-                for it in items
-            ]
-            groups.append((t, station_id, readings))
-        return groups
+            args = [t, sid, *[vals[c] for c in cols]] if cols else [t, sid]
+            self.conn.execute(sql, args)
+            touched += 1
+        self.conn.commit()
+        return touched
 
-    def mark_synced(self, iso_time: str) -> int:
+    def fetch_unsynced(self, limit: int = 240) -> list[dict]:
+        """Return whole unsynced rows (oldest first) as dicts."""
         cur = self.conn.execute(
-            "UPDATE readings SET synced = 1 WHERE time = ? AND synced = 0", (iso_time,)
+            "SELECT * FROM readings WHERE synced = 0 ORDER BY time ASC LIMIT ?", (limit,)
+        )
+        return [dict(r) for r in cur]
+
+    def mark_synced(self, iso_time: str, station_id: str) -> int:
+        cur = self.conn.execute(
+            "UPDATE readings SET synced = 1 WHERE time = ? AND station_id = ? AND synced = 0",
+            (iso_time, station_id),
         )
         self.conn.commit()
         return cur.rowcount
@@ -118,7 +101,6 @@ class Storage:
         return self.conn.execute("SELECT COUNT(*) FROM readings WHERE synced = 0").fetchone()[0]
 
     def prune(self, retention_days: int) -> int:
-        """Delete SYNCED rows older than retention_days (unsynced rows are always kept)."""
         cutoff = _iso(datetime.now(timezone.utc) - timedelta(days=retention_days))
         cur = self.conn.execute(
             "DELETE FROM readings WHERE synced = 1 AND time < ?", (cutoff,)

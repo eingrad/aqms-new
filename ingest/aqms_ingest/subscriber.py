@@ -48,9 +48,9 @@ class Subscriber:
     def _on_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-            rows = parse_payload(payload)
-            n = self.writer.upsert(rows)
-            log.info("%s: upserted %d rows (ts=%s)", msg.topic, n, payload.get("ts"))
+            ts, station_id, values = parse_payload(payload)
+            self.writer.upsert(ts, station_id, values)
+            log.info("%s: upserted ts=%s (%d params)", msg.topic, ts, len(values))
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             log.warning("dropping malformed message on %s: %s", msg.topic, exc)
         except Exception as exc:  # DB error after retries — log and continue
