@@ -17,7 +17,10 @@ from pymodbus.client import ModbusTcpClient
 from .decode import WORD_ORDERS, decode_value
 
 # address, parameter, register count  (Palas Fidas Modbus map, input registers / FC04)
+# Only float32 (2-register) values are probed — word order is irrelevant for the uint16
+# code fields (MODUS/MESSAGE/COINCIDENCE) and for the holding-register AVG_TIME_PSD.
 FIDAS_MAP = [
+    (14, "FLOW (l/min)", 2), (16, "TEMP_ANLZ (degC)", 2), (18, "HUM_ANLZ (%)", 2),
     (37, "Cn (P/cm3)", 2), (39, "PM1 (mg/m3)", 2), (41, "PM2_5 (mg/m3)", 2),
     (43, "PM4 (mg/m3)", 2), (45, "PM10 (mg/m3)", 2), (47, "TSP (mg/m3)", 2),
     (49, "TEMP (degC)", 2), (51, "PRESSURE (hPa)", 2), (53, "HUMIDITY (%)", 2),

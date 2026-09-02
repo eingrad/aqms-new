@@ -1,8 +1,17 @@
 """Accumulate sub-minute samples and emit one averaged Reading per parameter per minute.
 
 The logger samples every `sample_interval_seconds`; each sample's Readings are fed to
-`add()`. At the minute boundary `build(minute)` returns the averaged Readings (mean, or
-circular mean for angular parameters like WDIR) and resets for the next minute.
+`add()`. At the minute boundary `build(minute)` returns the reduced Readings and resets
+for the next minute. The reduction per parameter is:
+
+    mean      (default)  arithmetic mean               — real measurements (PM, flow, temp)
+    circular             circular mean of angles       — angular params (WDIR)
+    last                 most recent sample this minute — discrete state codes (MODUS, MESSAGE)
+    max                  max sample this minute         — latching status flags (COINCIDENCE)
+
+`last`/`max` exist because a numeric mean is meaningless for discrete status codes
+(averaging modus 1 and 2 → 1.5). `last` reports the state at the minute boundary; `max`
+ensures a brief error flag that occurred at any point in the minute is not lost.
 """
 from __future__ import annotations
 
@@ -24,8 +33,15 @@ def circular_mean(degrees: list[float]) -> float | None:
 
 
 class MinuteAggregator:
-    def __init__(self, circular_params: set[str] | None = None):
+    def __init__(
+        self,
+        circular_params: set[str] | None = None,
+        last_params: set[str] | None = None,
+        max_params: set[str] | None = None,
+    ):
         self.circular_params = circular_params or set()
+        self.last_params = last_params or set()
+        self.max_params = max_params or set()
         # key: (station_id, device, parameter) -> {"values": [...], "unit": str}
         self._acc: dict[tuple[str, str, str], dict] = {}
 
@@ -54,6 +70,10 @@ class MinuteAggregator:
                 continue
             if parameter in self.circular_params:
                 avg = circular_mean(values)
+            elif parameter in self.last_params:
+                avg = values[-1]          # current state at the minute boundary
+            elif parameter in self.max_params:
+                avg = max(values)         # latch any flag raised during the minute
             else:
                 avg = sum(values) / len(values)
             if avg is None:

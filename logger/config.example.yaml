@@ -70,6 +70,29 @@ devices:
       # status word (bit-flags) — read as raw uint16 if you want to log it:
       # - { parameter: STATUS, address: 67, count: 1, type: uint16, function: input, unit: "" }
 
+      # --- Fidas 200 analyzer status/health (Palas "General data" block, input FC04) ---
+      # Stored for status monitoring (no dashboard yet). float32 values (flow/internal
+      # temp/humidity) are averaged; the uint16 code fields are NOT numerically averaged:
+      #   average: last -> current state at the minute boundary (MODUS/MESSAGE/AVG_TIME_PSD)
+      #   average: max  -> latch any error raised during the minute (COINCIDENCE)
+      # Code meanings (decode at display time):
+      #   MODUS        0=scope 1=auto 2=manual 3=idle
+      #   MESSAGE      0=measurement started 1=--- 2=continued 3=paused
+      #   COINCIDENCE  0=no coincidence 1=coincidence error
+      #   AVG_TIME_PSD 0=auto/1s 1=auto/10s 2=auto/60s 3=auto/120s 4=-- 5=manual (see holding addr 5)
+      # NOTE: internal TEMP/HUMIDITY here are the analyzer interior — distinct from the
+      # weather-station (outside) TEMP@49 / HUMIDITY@53 above.
+      - { parameter: MODUS,             address: 11, count: 1, type: uint16,  function: input,   average: last, unit: "code" }
+      - { parameter: MESSAGE,           address: 12, count: 1, type: uint16,  function: input,   average: last, unit: "code" }
+      - { parameter: COINCIDENCE,       address: 13, count: 1, type: uint16,  function: input,   average: max,  unit: "code" }
+      - { parameter: FLOW,              address: 14, count: 2, type: float32, function: input,   unit: "l/min" }
+      - { parameter: TEMP_ANALYZER,     address: 16, count: 2, type: float32, function: input,   unit: "degC" }
+      - { parameter: HUMIDITY_ANALYZER, address: 18, count: 2, type: float32, function: input,   unit: "%" }
+      # selected averaging time for particle size distribution — settings/HOLDING reg (FC03).
+      # Its current value is readable; separate function group, so an FC03 failure only
+      # NULLs this one parameter (the input block above is unaffected).
+      - { parameter: AVG_TIME_PSD,      address: 3,  count: 1, type: uint16,  function: holding, average: last, unit: "code" }
+
   # ---------------------------------------------------------------------------
   # FPI gases (O3/SO2/CO/NOx) — PHASE 5, Option A. Reads FPI's AQMS-Plus MySQL.
   # Adapter is built and unit-tested; UNCOMMENT and fill the real schema values

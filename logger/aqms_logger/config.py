@@ -100,6 +100,16 @@ class LoggerConfig:
     def circular_params(self) -> set[str]:
         return {r.parameter for d in self.devices for r in d.registers if r.average == "circular"}
 
+    @property
+    def last_params(self) -> set[str]:
+        """Parameters reduced to the last sample of the minute (discrete state codes)."""
+        return {r.parameter for d in self.devices for r in d.registers if r.average == "last"}
+
+    @property
+    def max_params(self) -> set[str]:
+        """Parameters reduced to the max sample of the minute (latching status flags)."""
+        return {r.parameter for d in self.devices for r in d.registers if r.average == "max"}
+
 
 def load_config(path: str) -> LoggerConfig:
     """Read YAML at `path`, load a sibling .env if present, resolve ${VAR}, and build dataclasses."""

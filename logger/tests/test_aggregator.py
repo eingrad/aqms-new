@@ -46,6 +46,34 @@ def test_circular_mean_for_wdir():
     assert min(v, 360.0 - v) < 1e-6             # ≈0°, not the linear-mean 180°
 
 
+def test_last_mode_reports_current_state():
+    # Discrete state codes (e.g. MODUS) use the most recent sample, not a mean.
+    agg = MinuteAggregator(last_params={"MODUS"})
+    for code in (1.0, 1.0, 2.0):          # auto, auto, manual
+        agg.add([R("MODUS", code, unit="code")])
+    out = {r.parameter: r for r in agg.build(M)}
+    assert out["MODUS"].value == 2.0      # last state, not mean 1.33
+    assert out["MODUS"].status == STATUS_VALID
+
+
+def test_last_mode_skips_none_samples():
+    # A comm-fail sample must not become the reported "current state".
+    agg = MinuteAggregator(last_params={"MODUS"})
+    agg.add([R("MODUS", 2.0, unit="code")])
+    agg.add([R("MODUS", None, unit="code", status=STATUS_COMM_FAIL)])
+    out = {r.parameter: r for r in agg.build(M)}
+    assert out["MODUS"].value == 2.0      # last *valid* sample
+
+
+def test_max_mode_latches_flag():
+    # A brief coincidence error anywhere in the minute must survive (max, not mean).
+    agg = MinuteAggregator(max_params={"COINCIDENCE"})
+    for code in (0.0, 1.0, 0.0):
+        agg.add([R("COINCIDENCE", code, unit="code")])
+    out = {r.parameter: r for r in agg.build(M)}
+    assert out["COINCIDENCE"].value == 1.0
+
+
 def test_build_resets():
     agg = MinuteAggregator()
     agg.add([R("PM2_5", 5.0)])

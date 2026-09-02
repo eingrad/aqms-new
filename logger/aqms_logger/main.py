@@ -122,7 +122,7 @@ def run(config_path: str, once: bool = False, no_mqtt: bool = False) -> None:
             return
 
         sample_interval = max(1, cfg.sample_interval_seconds)
-        agg = MinuteAggregator(cfg.circular_params)
+        agg = MinuteAggregator(cfg.circular_params, cfg.last_params, cfg.max_params)
         current_minute = (int(time.time()) // 60) * 60
         next_sample = time.time()
         while _running:
