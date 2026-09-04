@@ -25,16 +25,23 @@ class MqttPublisher:
             mqtt.CallbackAPIVersion.VERSION2,
             client_id=cfg.client_id,
             clean_session=False,          # keep session so QoS1 survives brief drops
+            transport=cfg.transport,      # "tcp" or "websockets"
         )
+        if cfg.transport == "websockets":
+            self._client.ws_set_options(path=cfg.ws_path)
         if cfg.username:
             self._client.username_pw_set(cfg.username, cfg.password)
         if cfg.tls_ca:
+            # self-hosted broker with a private CA
             self._client.tls_set(
                 ca_certs=cfg.tls_ca,
                 certfile=cfg.tls_cert or None,
                 keyfile=cfg.tls_key or None,
                 tls_version=ssl.PROTOCOL_TLS_CLIENT,
             )
+        elif cfg.tls:
+            # public edge cert (e.g. Cloudflare on :443) — trust the system CA store
+            self._client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         # Reconnect backoff between 1s and 2 minutes.

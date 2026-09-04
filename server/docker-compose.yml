@@ -1,0 +1,67 @@
+# Dedicated AQMS server stack — fully separate from the aquamind-prod-* containers.
+# Deploy on the server:  cd server && docker compose up -d
+# Nothing is published to the host; external access to the broker is via the tunnel only.
+name: aqms
+
+networks:
+  aqms-net:
+    driver: bridge
+
+volumes:
+  aqms_db_data:
+  aqms_mqtt_data:
+  aqms_redis_data:
+
+services:
+  aqms-db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: aqms-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aqms
+      POSTGRES_USER: aqms_ingest
+      POSTGRES_PASSWORD: ${AQMS_DB_PASSWORD}
+    volumes:
+      - aqms_db_data:/var/lib/postgresql/data
+      - ../ingest/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro   # runs once, on first init
+    networks: [aqms-net]
+
+  aqms-mqtt:
+    image: eclipse-mosquitto:2
+    container_name: aqms-mqtt
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd            # create before first start (see README)
+      - aqms_mqtt_data:/mosquitto/data
+    networks: [aqms-net]
+
+  aqms-redis:
+    image: redis:7-alpine
+    container_name: aqms-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${AQMS_REDIS_PASSWORD}", "--save", "60", "1"]
+    volumes:
+      - aqms_redis_data:/data
+    networks: [aqms-net]
+
+  aqms-ingest:
+    build: ../ingest
+    container_name: aqms-ingest
+    restart: unless-stopped
+    depends_on: [aqms-db, aqms-mqtt, aqms-redis]
+    environment:
+      AQMS_DB_PASSWORD: ${AQMS_DB_PASSWORD}
+      AQMS_MQTT_INGEST_PASSWORD: ${AQMS_MQTT_INGEST_PASSWORD}
+      AQMS_REDIS_PASSWORD: ${AQMS_REDIS_PASSWORD}
+    volumes:
+      - ../ingest/config.example.yaml:/app/config.yaml:ro     # resolves ${AQMS_*} from the env above
+    networks: [aqms-net]
+
+  aqms-cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: aqms-cloudflared
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${AQMS_TUNNEL_TOKEN}"]
+    networks: [aqms-net]

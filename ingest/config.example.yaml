@@ -1,16 +1,29 @@
-# AQMS server ingest configuration. Copy to config.yaml. Secrets from .env via ${VAR}.
+# AQMS server ingest configuration. Copy to config.yaml.
+# The ingest runs INSIDE the aqms-net Docker network, so it reaches the other
+# containers by name (aqms-db, aqms-mqtt, aqms-redis) over plain internal ports.
+# Secrets come from the container environment (server/.env via docker-compose).
 
 timescaledb:
-  dsn: ${TSDB_DSN}
+  dsn: host=aqms-db port=5432 dbname=aqms user=aqms_ingest password=${AQMS_DB_PASSWORD} sslmode=disable
 
 mqtt:
-  host: ${MQTT_HOST}
-  port: ${MQTT_PORT}
-  username: ${MQTT_USERNAME}
-  password: ${MQTT_PASSWORD}
-  tls_ca: ${MQTT_TLS_CA}
-  tls_cert: ${MQTT_TLS_CERT}
-  tls_key: ${MQTT_TLS_KEY}
+  host: aqms-mqtt               # internal broker, plain TCP on the Docker network
+  port: 1883
+  username: aqms_ingest
+  password: ${AQMS_MQTT_INGEST_PASSWORD}
   topic: aqms/+/readings        # subscribe to every station
   qos: 1
   client_id: aqms-ingest
+
+redis:
+  enabled: true
+  host: aqms-redis
+  port: 6379
+  db: 0
+  password: ${AQMS_REDIS_PASSWORD}
+  key_template: "aqms:{station_id}:live"   # what the dashboard GETs
+  ttl_seconds: 120
+  # Optional: map internal param names -> the dashboard's expected JSON field names
+  # fields:
+  #   PM2_5: pm25
+  #   PM10: pm10

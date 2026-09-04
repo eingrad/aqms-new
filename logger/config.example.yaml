@@ -7,33 +7,25 @@ poll_interval_seconds: 60      # store/publish cadence: one AVERAGED row per min
 sqlite_path: aqms_logger.db    # local store #1 (also the store-and-forward buffer)
 retention_days: 30             # prune SYNCED rows older than this from SQLite
 
+# MQTT to the server broker via the Cloudflare tunnel (MQTT-over-WebSocket-Secure).
+# The broker isn't exposed as raw TCP, so we connect as WSS to mqtt.myaqms.com:443;
+# Cloudflare provides the TLS at its edge (tls: true, no custom CA needed).
 mqtt:
-  host: ${MQTT_HOST}
-  port: ${MQTT_PORT}
-  username: ${MQTT_USERNAME}
+  host: mqtt.myaqms.com        # the Cloudflare public hostname for the AQMS broker
+  port: 443
+  transport: websockets        # MQTT-over-WebSocket (required through Cloudflare)
+  tls: true                    # trust Cloudflare's edge cert (system CA store)
+  ws_path: /mqtt
+  username: aqms_station
   password: ${MQTT_PASSWORD}
-  tls_ca: ${MQTT_TLS_CA}       # server broker uses TLS + auth
-  tls_cert: ${MQTT_TLS_CERT}   # optional (mTLS)
-  tls_key: ${MQTT_TLS_KEY}     # optional (mTLS)
   base_topic: aqms             # publishes to  aqms/<station_id>/readings
   qos: 1
   client_id: aqms-logger-TNBJ-AQMS1
 
-# Redis live cache — the dashboard GETs this key every ~10s for its live section.
-# The logger writes one JSON value per minute with a TTL (expiry = freshness signal).
+# Redis now lives on the SERVER and is written by the ingest service (not the logger),
+# because the server's Redis is internal-only. Keep the logger's Redis DISABLED.
 redis:
-  enabled: true
-  host: 127.0.0.1              # <-- your Redis host
-  port: 6379
-  db: 0
-  password: ""                 # or ${REDIS_PASSWORD}
-  key_template: "aqms:{station_id}:live"   # dashboard reads this exact key
-  ttl_seconds: 120             # > 60 so it survives between minute writes; expires ~2 min after logger stops
-  # Optional: map internal names -> the dashboard's expected JSON field names.
-  # fields:
-  #   PM2_5: pm25
-  #   PM10: pm10
-  #   TEMP: temperature
+  enabled: false
 
 devices:
   # ---------------------------------------------------------------------------

@@ -1,0 +1,8 @@
+# AQMS Mosquitto ACL — least privilege per user.
+# The station logger may only PUBLISH under aqms/#; the ingest may only SUBSCRIBE.
+
+user aqms_station
+topic write aqms/#
+
+user aqms_ingest
+topic read aqms/#

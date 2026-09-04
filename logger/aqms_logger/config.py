@@ -67,6 +67,9 @@ class MqttConfig:
     base_topic: str = "aqms"
     qos: int = 1
     client_id: str = "aqms-logger"
+    transport: str = "tcp"       # tcp | websockets (websockets = MQTT-over-WSS via Cloudflare)
+    ws_path: str = "/mqtt"       # websocket path on the broker's WS listener
+    tls: bool = False            # force TLS without a custom CA (e.g. Cloudflare edge cert on :443)
 
 
 @dataclass

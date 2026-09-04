@@ -6,6 +6,7 @@ import logging
 import signal
 
 from .config import load_config
+from .live_redis import LivePublisher
 from .subscriber import Subscriber
 from .timescale_writer import TimescaleWriter
 
@@ -25,7 +26,8 @@ def main() -> None:
 
     cfg = load_config(args.config)
     writer = TimescaleWriter(cfg.dsn)
-    subscriber = Subscriber(cfg.mqtt, writer)
+    live = LivePublisher(cfg.redis)
+    subscriber = Subscriber(cfg.mqtt, writer, live)
 
     def _stop(signum, frame):
         log.info("signal %s; stopping", signum)
@@ -37,6 +39,7 @@ def main() -> None:
     try:
         subscriber.run()
     finally:
+        live.close()
         writer.close()
         log.info("stopped")
 

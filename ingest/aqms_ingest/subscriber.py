@@ -8,15 +8,17 @@ import ssl
 import paho.mqtt.client as mqtt
 
 from .config import MqttConfig
+from .live_redis import LivePublisher
 from .timescale_writer import TimescaleWriter, parse_payload
 
 log = logging.getLogger(__name__)
 
 
 class Subscriber:
-    def __init__(self, cfg: MqttConfig, writer: TimescaleWriter):
+    def __init__(self, cfg: MqttConfig, writer: TimescaleWriter, live: LivePublisher | None = None):
         self.cfg = cfg
         self.writer = writer
+        self.live = live
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cfg.client_id)
         if cfg.username:
             self._client.username_pw_set(cfg.username, cfg.password)
@@ -50,6 +52,8 @@ class Subscriber:
             payload = json.loads(msg.payload.decode("utf-8"))
             ts, station_id, values = parse_payload(payload)
             self.writer.upsert(ts, station_id, values)
+            if self.live is not None:
+                self.live.publish(station_id, ts, values)   # best-effort live cache
             log.info("%s: upserted ts=%s (%d params)", msg.topic, ts, len(values))
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             log.warning("dropping malformed message on %s: %s", msg.topic, exc)
