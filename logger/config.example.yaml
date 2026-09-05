@@ -59,8 +59,6 @@ devices:
       - { parameter: WSP,     address: 61, count: 2, type: float32, function: input, unit: "km/h" }   # ×0.27778 for m/s
       - { parameter: WDIR,    address: 63, count: 2, type: float32, function: input, unit: "deg", average: circular }  # angular mean
       - { parameter: PRECIP,  address: 65, count: 2, type: float32, function: input, unit: "l/m2/h" }
-      # status word (bit-flags) — read as raw uint16 if you want to log it:
-      # - { parameter: STATUS, address: 67, count: 1, type: uint16, function: input, unit: "" }
 
       # --- Fidas 200 analyzer status/health (Palas "General data" block, input FC04) ---
       # Stored for status monitoring (no dashboard yet). float32 values (flow/internal
@@ -80,6 +78,16 @@ devices:
       - { parameter: FLOW,              address: 14, count: 2, type: float32, function: input,   unit: "l/min" }
       - { parameter: TEMP_ANALYZER,     address: 16, count: 2, type: float32, function: input,   unit: "degC" }
       - { parameter: HUMIDITY_ANALYZER, address: 18, count: 2, type: float32, function: input,   unit: "%" }
+      # Additional diagnostics — all inside the input span already being read, so
+      # these cost NO extra Modbus requests (the block read just gets sliced further).
+      - { parameter: FLOW_OUTPUT_LEVEL, address: 26, count: 2, type: float32, function: input,   unit: "%" }
+      - { parameter: TEMP_LED,          address: 34, count: 2, type: float32, function: input,   unit: "degC" }
+      # Bit-flag words: a numeric mean is meaningless, so take the state at the
+      # minute boundary. `max` is NOT used here — for a multi-bit word it is a
+      # numeric max, not a bitwise OR, so it can silently drop a low bit that was
+      # set in an earlier sample. Decode the individual bits at display time.
+      - { parameter: DIGITAL_INPUTS,    address: 36, count: 1, type: uint16,  function: input,   average: last, unit: "bitfield" }
+      - { parameter: STATUS,            address: 67, count: 1, type: uint16,  function: input,   average: last, unit: "bitfield" }
       # selected averaging time for particle size distribution — settings/HOLDING reg (FC03).
       # Its current value is readable; separate function group, so an FC03 failure only
       # NULLs this one parameter (the input block above is unaffected).
