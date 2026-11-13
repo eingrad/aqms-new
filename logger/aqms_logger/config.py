@@ -44,7 +44,7 @@ class RegisterSpec:
 @dataclass
 class DeviceConfig:
     name: str
-    type: str                        # modbus_tcp | fpi_tcp | fpi_mysql | hj212_receiver
+    type: str                        # modbus_tcp | fpi_tcp | synspec_gc | fpi_mysql | hj212_receiver
     host: str = ""
     port: int = 502
     unit_id: int = 1

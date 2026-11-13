@@ -6,6 +6,7 @@ from .base import SourceAdapter
 from .fpi_mysql import FpiMysqlAdapter
 from .fpi_tcp import FpiTcpAdapter
 from .modbus_tcp import ModbusTcpAdapter
+from .synspec_gc import SynspecGcAdapter
 
 
 def build_adapter(device: DeviceConfig, station_id: str) -> SourceAdapter:
@@ -14,6 +15,8 @@ def build_adapter(device: DeviceConfig, station_id: str) -> SourceAdapter:
         return ModbusTcpAdapter(device, station_id)
     if device.type == "fpi_tcp":
         return FpiTcpAdapter(device, station_id)
+    if device.type == "synspec_gc":
+        return SynspecGcAdapter(device, station_id)
     if device.type == "fpi_mysql":
         return FpiMysqlAdapter(device, station_id)
     if device.type == "hj212_receiver":
