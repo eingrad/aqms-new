@@ -32,7 +32,7 @@ gap, not silently missing data. Only `status=0` samples feed hourly averages.
 
 ## Hourly averages (server)
 A TimescaleDB continuous aggregate (`readings_hourly`) averages only valid samples per hour.
-The Synspec GC (CH4 / TNMHC) delivers one result per run and holds it on its outputs; the
+The Synspec GC (CH4 / NMHC, ppb) delivers one result per run and holds it on its outputs; the
 logger stores the held result every minute (`last`, not a mean), blank while `GC_STATUS` ≠ 0,
 so the same rule applies to it (see [commissioning-gc.md](commissioning-gc.md)).
 `readings_hourly_valid` applies the 75% completeness rule (≥45 of 60 minutes) — below that the

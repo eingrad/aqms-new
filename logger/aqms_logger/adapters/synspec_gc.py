@@ -9,8 +9,8 @@ GCAlpha software). Register map and decoding: synspec_gc_map.py (Synspec tech no
       timeout: 2.0
       options:
         components:             # GC component number -> parameter + unit to store
-          1: { parameter: CH4,   unit: ppm }
-          2: { parameter: TNMHC, unit: ppm }
+          1: { parameter: CH4,  unit: ppb }
+          2: { parameter: NMHC, unit: ppb }     # the GC calls it "TNMHC"
         channel: 1              # stream-selector channel carrying ambient air (1 = no selector)
         max_age_minutes: 60     # values blank when no new run has finished for this long
         diagnostics: true       # also store status words, data age, inlet pressure, column flow
@@ -284,8 +284,10 @@ class SynspecGcAdapter(SourceAdapter):
 
     # --- readings --------------------------------------------------------------------------
     def _float(self, words: list[int], offset: int) -> float | None:
+        """float32 rounded to the 7 significant digits it carries, so 2.1 ppm (sent as
+        2.0999999) becomes 2100 ppb rather than 2099.9999. None for NaN / infinity."""
         value = decode_value(words[offset:offset + 2], "float32", self.cfg.word_order)
-        return value if math.isfinite(value) else None
+        return float(f"{value:.7g}") if math.isfinite(value) else None
 
     def _unit_factor(self, c: Component, code: int) -> float | None:
         gc_unit = gc.UNIT_CODES.get(code)
