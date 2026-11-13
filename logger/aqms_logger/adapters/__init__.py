@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..config import DeviceConfig
 from .base import SourceAdapter
 from .fpi_mysql import FpiMysqlAdapter
+from .fpi_tcp import FpiTcpAdapter
 from .modbus_tcp import ModbusTcpAdapter
 
 
@@ -11,6 +12,8 @@ def build_adapter(device: DeviceConfig, station_id: str) -> SourceAdapter:
     """Factory: instantiate the adapter for a device based on its `type`."""
     if device.type == "modbus_tcp":
         return ModbusTcpAdapter(device, station_id)
+    if device.type == "fpi_tcp":
+        return FpiTcpAdapter(device, station_id)
     if device.type == "fpi_mysql":
         return FpiMysqlAdapter(device, station_id)
     if device.type == "hj212_receiver":

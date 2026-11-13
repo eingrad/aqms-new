@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 from datetime import datetime
 
-from .models import Reading, STATUS_COMM_FAIL, STATUS_VALID
+from .models import Reading, STATUS_COMM_FAIL, STATUS_VALID, tidy
 
 
 def circular_mean(degrees: list[float]) -> float | None:
@@ -80,7 +80,7 @@ class MinuteAggregator:
                 out.append(Reading(minute, station_id, device, parameter, None,
                                    entry["unit"], STATUS_COMM_FAIL))
             else:
-                out.append(Reading(minute, station_id, device, parameter, round(avg, 4),
+                out.append(Reading(minute, station_id, device, parameter, tidy(avg),
                                    entry["unit"], STATUS_VALID))
         self._acc.clear()
         return out

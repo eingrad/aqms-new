@@ -94,6 +94,47 @@ devices:
       - { parameter: AVG_TIME_PSD,      address: 3,  count: 1, type: uint16,  function: holding, average: last, unit: "code" }
 
   # ---------------------------------------------------------------------------
+  # FPI gas analyzers — read DIRECTLY over TCP port 10000 with FPI's own protocol
+  # (adapter fpi_tcp; no AQMS Plus / MySQL needed). One entry per analyzer.
+  # Every sample (sample_interval_seconds) sends 2-3 small requests per analyzer.
+  #   - gas values are stored and sent in `unit:` (O3 / SO2 / NOx ppb, CO ppm). Each reply
+  #     carries the analyzer's own unit: ppb <-> ppm is converted (x1000) and the log says so
+  #     once; ug/m3 / mg/m3 can't be converted, so those gas values are left blank (log says why)
+  #   - gas values are blank while the analyzer is NOT measuring (calibration etc.);
+  #     <GAS>_STATUS carries the FPI status code (0 = measuring), max per minute
+  #   - diagnostics: flow (cc/min), pressure (psia), temperatures (degC), O3 volts
+  # Check a single round with:  python -m aqms_logger.main --config config.yaml --once --no-mqtt
+  # ---------------------------------------------------------------------------
+  - name: fpi_o3
+    type: fpi_tcp
+    host: 192.168.13.40        # AQMS-300
+    port: 10000
+    timeout: 1.5               # seconds per reply
+    options: { model: AQMS-300, unit: ppb, diagnostics: true }
+
+  - name: fpi_co
+    type: fpi_tcp
+    host: 192.168.13.70        # AQMS-400
+    port: 10000
+    timeout: 1.5
+    options: { model: AQMS-400, unit: ppm, diagnostics: true }
+
+  - name: fpi_so2
+    type: fpi_tcp
+    host: 192.168.13.10        # AQMS-500
+    port: 10000
+    timeout: 1.5
+    options: { model: AQMS-500, unit: ppb, diagnostics: true }
+
+  - name: fpi_nox
+    type: fpi_tcp
+    host: 192.168.13.1         # AQMS-600 (NO, NO2, NOX)
+    port: 10000
+    timeout: 1.5
+    options: { model: AQMS-600, unit: ppb, diagnostics: true }
+
+  # ---------------------------------------------------------------------------
+  # ALTERNATIVE (not needed now that fpi_tcp reads the analyzers directly):
   # FPI gases (O3/SO2/CO/NOx) — PHASE 5, Option A. Reads FPI's AQMS-Plus MySQL.
   # Adapter is built and unit-tested; UNCOMMENT and fill the real schema values
   # once `Test-NetConnection <DAS_IP> -Port 3306` succeeds and the DAS tables are

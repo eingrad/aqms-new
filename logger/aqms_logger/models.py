@@ -22,6 +22,12 @@ STATUS_NAMES = {
 }
 
 
+def tidy(value: float) -> float:
+    """Round away float noise before storing: 4 decimals, but values below 1 keep 6 significant
+    digits, so gases in ppm (SO2 0.004851) are not cut to 0.0049."""
+    return round(value, 4) if abs(value) >= 1 else float(f"{value:.6g}")
+
+
 @dataclass(frozen=True)
 class Reading:
     """One measurement at one timestamp for one parameter of one device.

@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 
 from . import forwarder
 from .adapters import build_adapter
+from .adapters.fpi_tcp import parameters as fpi_tcp_parameters
+from .adapters.fpi_tcp import status_parameters as fpi_tcp_status_parameters
 from .aggregator import MinuteAggregator
 from .config import load_config
 from .live_redis import LivePublisher
@@ -34,6 +36,8 @@ def _configured_parameters(devices) -> list[str]:
         params += [r.parameter for r in d.registers]
         if d.type == "fpi_mysql":
             params += list(d.options.get("columns", {}).keys())
+        elif d.type == "fpi_tcp":
+            params += fpi_tcp_parameters(d)
     seen, ordered = set(), []
     for p in params:
         if p not in seen:
@@ -49,11 +53,11 @@ def _handle_signal(signum, frame):
 
 
 def _print_readings(readings) -> None:
-    print(f"\n{'device':<12}{'parameter':<12}{'value':>14}  {'unit':<8}status")
-    print("-" * 52)
+    print(f"\n{'device':<12}{'parameter':<22}{'value':>14}  {'unit':<9}status")
+    print("-" * 63)
     for r in readings:
         cell = "(no data)".rjust(14) if r.value is None else f"{r.value:>14.4g}"
-        print(f"{r.device:<12}{r.parameter:<12}{cell}  {r.unit:<8}{r.status}")
+        print(f"{r.device:<12}{r.parameter:<22}{cell}  {r.unit:<9}{r.status}")
 
 
 def _read_all(adapters, ts):
@@ -122,7 +126,9 @@ def run(config_path: str, once: bool = False, no_mqtt: bool = False) -> None:
             return
 
         sample_interval = max(1, cfg.sample_interval_seconds)
-        agg = MinuteAggregator(cfg.circular_params, cfg.last_params, cfg.max_params)
+        # FPI <GAS>_STATUS codes: max per minute, so a calibration anywhere in the minute shows
+        agg = MinuteAggregator(cfg.circular_params, cfg.last_params,
+                               cfg.max_params | fpi_tcp_status_parameters(cfg.devices))
         current_minute = (int(time.time()) // 60) * 60
         next_sample = time.time()
         while _running:
