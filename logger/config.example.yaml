@@ -134,6 +134,35 @@ devices:
     options: { model: AQMS-600, unit: ppb, diagnostics: true }
 
   # ---------------------------------------------------------------------------
+  # Synspec Alpha 115 methane / TNMHC analyser (gas chromatograph, GCAlpha software)
+  # over Modbus-TCP, read-only (adapter synspec_gc). Runbook: docs/commissioning-gc.md
+  # On the GC: Datalogger Settings -> MODBUS ticked in the TCP:9882 column, Adress 001,
+  # and THIS PC's IP on a TCP-IPn line of the GC's ID file (else "Hacker alarm").
+  #   - one result per GC run: each minute stores the result on the GC outputs at the
+  #     end of that minute (not a mean). GC_DATA_AGE = seconds since that run (GC clock)
+  #   - CH4 / TNMHC are blank while GC_STATUS is not 0 (max per minute):
+  #       1 stale (no new run for max_age_minutes)   2 other stream-selector channel
+  #       3 maintenance   4 calibration / validation / span-zero gas data on the outputs
+  #       5 output invalid / starting up / FID flame error / first run after a restart
+  #   - check numbers + units first:  python -m aqms_logger.gc_probe --host <GC_IP> --port 9882
+  #     and set `unit:` to the GC's unit (ppb <-> ppm converts; ppm <-> mg/m3 can't)
+  # ---------------------------------------------------------------------------
+  - name: gc_alpha115
+    type: synspec_gc
+    host: 192.168.13.XXX       # <-- the GC's IP address (ipconfig on the GC PC)
+    port: 9882                 # the TCP column in the GC's Datalogger Settings
+    unit_id: 1                 # "Adress: 001" in Datalogger Settings
+    timeout: 2.0
+    options:
+      components:              # GC component number -> parameter + unit stored (confirm with gc_probe)
+        1: { parameter: CH4,   unit: ppm }    # methane
+        2: { parameter: TNMHC, unit: ppm }    # total non-methane hydrocarbons
+        # 3: { parameter: THC, unit: ppm }    # only if the GC reports THC as a component
+      channel: 1               # stream-selector channel with ambient air (1 = no selector)
+      max_age_minutes: 60      # blank the values if no new run finished for this long (> 2 cycles)
+      diagnostics: true        # GC_STATUS_181/183/184, GC_ERRORS_185/186, GC_DATA_AGE, pressure, flow
+
+  # ---------------------------------------------------------------------------
   # ALTERNATIVE (not needed now that fpi_tcp reads the analyzers directly):
   # FPI gases (O3/SO2/CO/NOx) — PHASE 5, Option A. Reads FPI's AQMS-Plus MySQL.
   # Adapter is built and unit-tested; UNCOMMENT and fill the real schema values

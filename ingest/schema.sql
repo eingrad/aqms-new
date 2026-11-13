@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS readings (
     "NO"        double precision,
     "NO2"       double precision,
     "THC"       double precision,
+    -- Synspec Alpha 115 GC: methane + total non-methane hydrocarbons (one result per GC run,
+    -- the logger stores the held result every minute)
+    "CH4"       double precision,
+    "TNMHC"     double precision,
     PRIMARY KEY (time, station_id)
 );
 
@@ -62,7 +66,9 @@ SELECT
     avg("NOX")      AS "NOX",      count("NOX")      AS "NOX_n",
     avg("NO")       AS "NO",       count("NO")       AS "NO_n",
     avg("NO2")      AS "NO2",      count("NO2")      AS "NO2_n",
-    avg("THC")      AS "THC",      count("THC")      AS "THC_n"
+    avg("THC")      AS "THC",      count("THC")      AS "THC_n",
+    avg("CH4")      AS "CH4",      count("CH4")      AS "CH4_n",
+    avg("TNMHC")    AS "TNMHC",    count("TNMHC")    AS "TNMHC_n"
 FROM readings
 GROUP BY bucket, station_id
 WITH NO DATA;

@@ -5,6 +5,7 @@ Replacement data pipeline for the TNBJ air-quality station. Instruments are read
 
 ```
  Fidas 200 ──────────── Modbus-TCP :502 ─────────────────┐
+ Synspec Alpha 115 GC (CH4/TNMHC) ── Modbus-TCP :9882 ───┤
                                                          ▼
  FPI AQMS-300/400/500/600 ─► AQMS-Plus DAS ─► MySQL ─(A) read ─┐   (phase 5)
                              (Windows)        └─(B) HJ212 push ─┤
@@ -28,6 +29,7 @@ Replacement data pipeline for the TNBJ air-quality station. Instruments are read
 - [x] 3 — MQTT publisher, server ingest, TimescaleDB schema
 - [x] 4 — store-and-forward + backfill
 - [~] 5 — FPI gas source: `fpi_mysql` adapter **built + tested** (needs real AQMS-Plus schema values in config); `hj212_receiver` fallback not built (only if MySQL is unreachable)
+- [~] GC — `synspec_gc` adapter for the Synspec Alpha 115 (CH4 / TNMHC) **built + tested**, read-only; on-site commissioning pending ([docs/commissioning-gc.md](docs/commissioning-gc.md))
 - [ ] 6 — hourly continuous aggregate + 75% validity + retention (schema.sql ready; enable on server)
 - [ ] 7 — service packaging (NSSM / systemd), docs
 
@@ -45,6 +47,12 @@ python -m aqms_logger.main --config config.yaml
 ```bash
 python -m aqms_logger.probe --host <FIDAS_IP> --port 502 --unit 1   # find the float word order
 python -m aqms_logger.main --config config.yaml --once --no-mqtt    # verify decoding, SQLite only
+```
+
+**Commissioning the Synspec GC (CH4 / TNMHC)** — follow [docs/commissioning-gc.md](docs/commissioning-gc.md).
+The probe reads it once, read-only (identity, last run, status, components and units):
+```bash
+python -m aqms_logger.gc_probe --host <GC_IP> --port 9882 --unit 1
 ```
 
 ## Quick start (ingest, on the server)

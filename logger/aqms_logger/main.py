@@ -18,6 +18,8 @@ from . import forwarder
 from .adapters import build_adapter
 from .adapters.fpi_tcp import parameters as fpi_tcp_parameters
 from .adapters.fpi_tcp import status_parameters as fpi_tcp_status_parameters
+from .adapters.synspec_gc import parameters as synspec_gc_parameters
+from .adapters.synspec_gc import reductions as synspec_gc_reductions
 from .aggregator import MinuteAggregator
 from .config import load_config
 from .live_redis import LivePublisher
@@ -38,6 +40,8 @@ def _configured_parameters(devices) -> list[str]:
             params += list(d.options.get("columns", {}).keys())
         elif d.type == "fpi_tcp":
             params += fpi_tcp_parameters(d)
+        elif d.type == "synspec_gc":
+            params += synspec_gc_parameters(d)
     seen, ordered = set(), []
     for p in params:
         if p not in seen:
@@ -126,9 +130,11 @@ def run(config_path: str, once: bool = False, no_mqtt: bool = False) -> None:
             return
 
         sample_interval = max(1, cfg.sample_interval_seconds)
-        # FPI <GAS>_STATUS codes: max per minute, so a calibration anywhere in the minute shows
-        agg = MinuteAggregator(cfg.circular_params, cfg.last_params,
-                               cfg.max_params | fpi_tcp_status_parameters(cfg.devices))
+        # FPI <GAS>_STATUS and GC_STATUS codes: max per minute, so a calibration anywhere in the
+        # minute shows. GC results: last per minute (one result per GC run, never blended).
+        gc_last, gc_max = synspec_gc_reductions(cfg.devices)
+        agg = MinuteAggregator(cfg.circular_params, cfg.last_params | gc_last,
+                               cfg.max_params | fpi_tcp_status_parameters(cfg.devices) | gc_max)
         current_minute = (int(time.time()) // 60) * 60
         next_sample = time.time()
         while _running:
