@@ -66,11 +66,21 @@ def _int16(word: int) -> int:
     return word - 0x10000 if word >= 0x8000 else word
 
 
+# GC component name -> the dashboard / hourly-average column it belongs in
+_KNOWN_NAMES = {"methane": "CH4", "ch4": "CH4", "tnmhc": "NMHC", "nmhc": "NMHC", "thc": "THC"}
+
+
 def suggest_parameter(name: str) -> str:
-    """Parameter name for a GC component name: CH4 for methane, else the name in capitals."""
-    if name.strip().lower() == "methane":
-        return "CH4"
-    return re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_") or "COMPONENT"
+    """Parameter name for a GC component name: CH4 / NMHC / THC where it fits, else the name
+    in capitals."""
+    known = _KNOWN_NAMES.get(name.strip().lower())
+    return known or re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_") or "COMPONENT"
+
+
+def suggest_unit(gc_unit: str | None) -> str:
+    """Volume ratios are stored in ppb (the dashboard unit, converted exactly); other units as
+    the GC reports them."""
+    return "ppb" if gc_unit in (None, "ppb", "ppm", "vol%") else gc_unit
 
 
 def _status_lines(status: list[int]) -> list[str]:
@@ -173,11 +183,13 @@ def report(read: Read) -> list[str]:
 
     if found:
         add("")
-        add("For config.yaml - keep the names CH4 / TNMHC / THC, those are the hourly-average columns:")
+        add("For config.yaml (CH4 / NMHC / THC are the dashboard and hourly-average names):")
         add("      components:")
         for n, name, unit in found:
-            line = f"        {n}: {{ parameter: {suggest_parameter(name)}, unit: {unit or 'ppm'} }}"
-            add(line + ("" if unit else "    # not calibrated on the GC - check"))
+            store = suggest_unit(unit)
+            note = ("    # not calibrated on the GC - check" if unit is None
+                    else f"    # GC reports {unit}; the logger converts" if unit != store else "")
+            add(f"        {n}: {{ parameter: {suggest_parameter(name)}, unit: {store} }}{note}")
     return lines
 
 

@@ -35,7 +35,7 @@ PM in mg/m³ (×1000 → µg/m³). Verify `word_order` once against the display.
 | WDIR      | 63 | 2 | float32 | ° | 1 |
 | PRECIP    | 65 | 2 | float32 | l/m²/h | 1 |
 
-## Synspec Alpha 115 GC (CH4 / TNMHC) — DONE (adapter `synspec_gc`, not `registers:`)
+## Synspec Alpha 115 GC (CH4 / NMHC) — DONE (adapter `synspec_gc`, not `registers:`)
 Source: Synspec tech note E066 (2025-10-02), all blocks present from GCAlpha V3.4.7.12 (TNBJ:
 V3.4.8.1). Function 3 (function 4 is identical), 0-based protocol addresses, float32 word order
 ABCD. The adapter reads the blocks itself; only the component numbers and units go in config

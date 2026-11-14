@@ -15,7 +15,7 @@ from aqms_logger.adapters.synspec_gc import (
 )
 from aqms_logger.aggregator import MinuteAggregator
 from aqms_logger.config import DeviceConfig, load_config
-from aqms_logger.gc_probe import Reader, report, suggest_parameter
+from aqms_logger.gc_probe import Reader, report, suggest_parameter, suggest_unit
 from aqms_logger.main import _configured_parameters
 from aqms_logger.models import (
     STATUS_ALARM, STATUS_CALIBRATION, STATUS_COMM_FAIL, STATUS_MAINTENANCE, STATUS_OUT_OF_RANGE,
@@ -130,8 +130,8 @@ class FakeGc:
 
 
 def device(**options):
-    opts = {"components": {1: {"parameter": "CH4", "unit": "ppm"},
-                           2: {"parameter": "TNMHC", "unit": "ppm"}}}
+    opts = {"components": {1: {"parameter": "CH4", "unit": "ppb"},
+                           2: {"parameter": "NMHC", "unit": "ppb"}}}
     opts.update(options)
     return DeviceConfig(name="gc_alpha115", type="synspec_gc", host="127.0.0.1", port=9882,
                         unit_id=1, options=opts)
@@ -181,8 +181,8 @@ def test_reads_components_and_diagnostics():
     fake = FakeGc(gc_memory())
     out = by_param(adapter(fake).read(NOW))
     assert list(out) == parameters(device())
-    assert out["CH4"].value == pytest.approx(1.95) and out["CH4"].unit == "ppm"
-    assert out["TNMHC"].value == pytest.approx(0.412)
+    assert out["CH4"].value == 1950.0 and out["CH4"].unit == "ppb"    # GC: 1.95 ppm, float32
+    assert out["NMHC"].value == 412.0
     assert all(out[p].status == STATUS_VALID for p in out)
     assert out["GC_STATUS"].value == 0.0
     assert out["GC_DATA_AGE"].value == 335.0                    # 22:40:35 - 22:35:00
@@ -217,7 +217,7 @@ def test_names_are_logged_once(caplog):
     ad.read(NOW)
     ad.read(NOW)
     msgs = [r.getMessage() for r in caplog.records]
-    assert sum("GC component 1 'Methane' -> CH4 (ppm)" in m for m in msgs) == 1
+    assert sum("GC component 1 'Methane' -> CH4 (ppb)" in m for m in msgs) == 1
     assert sum("GC component 2 has no name" in m for m in msgs) == 1
 
 
@@ -237,7 +237,7 @@ def test_names_are_logged_once(caplog):
 ])
 def test_blanks_values_and_says_why(memory, code, status):
     out = by_param(adapter(FakeGc(gc_memory(**memory))).read(NOW))
-    for p in ("CH4", "TNMHC"):
+    for p in ("CH4", "NMHC"):
         assert out[p].value is None and out[p].status == status
     assert out["GC_STATUS"].value == float(code)
     assert out["GC_INLET_PRESSURE"].value == pytest.approx(2.88)    # diagnostics still stored
@@ -245,7 +245,7 @@ def test_blanks_values_and_says_why(memory, code, status):
 
 def test_ambient_channel_can_be_configured():
     out = by_param(adapter(FakeGc(gc_memory(channel=2)), channel=2).read(NOW))
-    assert out["GC_STATUS"].value == 0.0 and out["CH4"].value == pytest.approx(1.95)
+    assert out["GC_STATUS"].value == 0.0 and out["CH4"].value == 1950.0
 
 
 def test_stale_without_a_decodable_run_time_uses_how_long_it_stays_unchanged():
@@ -259,33 +259,41 @@ def test_stale_without_a_decodable_run_time_uses_how_long_it_stays_unchanged():
     assert out["GC_STATUS"].value == float(gc.STALE) and out["CH4"].value is None
     mem[gc.RUN_TIME + 6] = 1                       # the run time changes: a new run finished
     out = by_param(ad.read(NOW))
-    assert out["GC_STATUS"].value == 0.0 and out["CH4"].value == pytest.approx(1.95)
+    assert out["GC_STATUS"].value == 0.0 and out["CH4"].value == 1950.0
 
 
 def test_nan_value_blanks_only_that_component():
     out = by_param(adapter(FakeGc(gc_memory(values={1: math.nan, 2: 0.412}))).read(NOW))
     assert out["CH4"].value is None and out["CH4"].status == STATUS_OUT_OF_RANGE
-    assert out["TNMHC"].value == pytest.approx(0.412) and out["GC_STATUS"].value == 0.0
+    assert out["NMHC"].value == 412.0 and out["GC_STATUS"].value == 0.0
 
 
 # ---- adapter: units -------------------------------------------------------------------------
-def test_ppb_on_the_gc_is_converted_to_ppm_and_logged_once(caplog):
+def test_ppm_on_the_gc_is_stored_as_ppb_and_logged_once(caplog):
     caplog.set_level(logging.INFO)
-    ad = adapter(FakeGc(gc_memory(values={1: 1950.0, 2: 412.0}, units={1: 2, 2: 2})))
+    ad = adapter(FakeGc(gc_memory()))                      # the GC reports ppm (unit code 4)
     out = by_param(ad.read(NOW))
     ad.read(NOW)
-    assert out["CH4"].value == pytest.approx(1.95) and out["TNMHC"].value == pytest.approx(0.412)
-    assert sum("is reported in ppb; converting to ppm" in r.getMessage()
+    assert out["CH4"].value == 1950.0 and out["NMHC"].value == 412.0
+    assert sum("is reported in ppm; converting to ppb" in r.getMessage()
                for r in caplog.records) == 2               # once per component
 
 
-@pytest.mark.parametrize("code,text", [(3, "can't be converted to ppm"), (0, "not calibrated")])
+def test_ppb_on_the_gc_is_stored_unchanged(caplog):
+    caplog.set_level(logging.INFO)
+    fake = FakeGc(gc_memory(values={1: 1950.0, 2: 412.0}, units={1: 2, 2: 2}))
+    out = by_param(adapter(fake).read(NOW))
+    assert out["CH4"].value == 1950.0 and out["NMHC"].value == 412.0
+    assert not any("converting" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("code,text", [(3, "can't be converted to ppb"), (0, "not calibrated")])
 def test_unit_that_cannot_be_stored_blanks_the_value(caplog, code, text):
     ad = adapter(FakeGc(gc_memory(units={1: code, 2: 4})))
     out = by_param(ad.read(NOW))
     ad.read(NOW)
     assert out["CH4"].value is None and out["CH4"].status == STATUS_OUT_OF_RANGE
-    assert out["TNMHC"].value == pytest.approx(0.412)
+    assert out["NMHC"].value == 412.0
     assert sum(text in r.getMessage() for r in caplog.records) == 1
 
 
@@ -303,7 +311,7 @@ def test_gc_down_gives_comm_fail_and_backs_off():
     ad.read(NOW)                                   # inside the 30 s back-off: not contacted
     assert fake.reads == []
     t[0] += 25
-    assert by_param(ad.read(NOW))["CH4"].value == pytest.approx(1.95)
+    assert by_param(ad.read(NOW))["CH4"].value == 1950.0
 
 
 def test_silent_gc_is_not_retried_on_a_fresh_connection():
@@ -320,13 +328,13 @@ def test_dropped_connection_reconnects_in_the_same_sample():
     ad.read(NOW)
     fake.drop_next = True
     out = by_param(ad.read(NOW))
-    assert out["CH4"].value == pytest.approx(1.95) and fake.connects == 2
+    assert out["CH4"].value == 1950.0 and fake.connects == 2
 
 
 def test_diagnostics_can_be_turned_off():
     fake = FakeGc(gc_memory())
     out = by_param(adapter(fake, diagnostics=False).read(NOW))
-    assert set(out) == {"CH4", "TNMHC", "GC_STATUS"}
+    assert set(out) == {"CH4", "NMHC", "GC_STATUS"}
     assert (gc.INLET_PRESSURE, 4) not in fake.reads
 
 
@@ -358,7 +366,7 @@ def test_minute_keeps_the_last_result_and_the_worst_status():
     fake.mem.update(zip(range(gc.INLET_PRESSURE, gc.INLET_PRESSURE + 2), float_words(2.90)))
     agg.add(ad.read(NOW))                                       # new run finished: 2.10
     out = by_param(agg.build(NOW.replace(second=0)))
-    assert out["CH4"].value == pytest.approx(2.10)              # last, not a blend of two runs
+    assert out["CH4"].value == 2100.0     # last, not a blend; float32 2.0999999 ppm -> 2100 ppb
     assert out["GC_STATUS"].value == float(gc.CALIBRATION)      # the calibration shows
     assert out["GC_INLET_PRESSURE"].value == pytest.approx((2.88 + 2.88 + 2.90) / 3, abs=1e-4)
 
@@ -373,8 +381,10 @@ def test_config_example_has_the_gc_without_column_clashes(monkeypatch):
     gc_dev = [d for d in cfg.devices if d.type == "synspec_gc"]
     assert len(gc_dev) == 1 and gc_dev[0].port == 9882 and gc_dev[0].unit_id == 1
     params = _configured_parameters(cfg.devices)
-    for p in ["CH4", "TNMHC", "GC_STATUS"] + [d[0] for d in DIAGNOSTICS]:
+    for p in ["CH4", "NMHC", "GC_STATUS"] + [d[0] for d in DIAGNOSTICS]:
         assert p in params
+    comps = gc_dev[0].options["components"]
+    assert {c["parameter"]: c["unit"] for c in comps.values()} == {"CH4": "ppb", "NMHC": "ppb"}
     assert len({p.lower() for p in params}) == len(params)      # SQLite ignores case
 
 
@@ -386,7 +396,8 @@ def test_probe_report_shows_what_to_compare():
     for expected in ("Synspec BV.", "3 = GCAlpha", "3.4.8.1", "51143",
                      "13-11-2026 22:40:35 (text)", "13-11-2026 22:35:00 (bcd)", "335 s",
                      "cycle about 240 s", "2.88 bar", "GC_STATUS 0", "Methane", "TNMHC",
-                     "1: { parameter: CH4, unit: ppm }", "2: { parameter: TNMHC, unit: ppm }"):
+                     "1: { parameter: CH4, unit: ppb }    # GC reports ppm; the logger converts",
+                     "2: { parameter: NMHC, unit: ppb }    # GC reports ppm; the logger converts"):
         assert expected in text, expected
     assert read.errors == [] and fake.writes == []
 
@@ -404,5 +415,8 @@ def test_probe_marks_blanking_bits_and_stops_on_a_silent_gc():
 
 def test_suggested_parameter_names():
     assert suggest_parameter("Methane") == "CH4"
-    assert suggest_parameter("TNMHC") == "TNMHC"
+    assert suggest_parameter("TNMHC") == "NMHC" and suggest_parameter("NMHC") == "NMHC"
+    assert suggest_parameter("THC") == "THC"
     assert suggest_parameter("m/p-Xylene") == "M_P_XYLENE"
+    assert suggest_unit("ppm") == "ppb" and suggest_unit("ppb") == "ppb"
+    assert suggest_unit("ug/m3") == "ug/m3"           # mass units can't become ppb

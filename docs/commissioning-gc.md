@@ -1,4 +1,4 @@
-# Synspec Alpha 115 GC (CH4 / TNMHC) commissioning runbook
+# Synspec Alpha 115 GC (CH4 / NMHC) commissioning runbook
 
 The Alpha 115 is a gas chromatograph with its own Windows PC running the GCAlpha software
 (V3.4.8.1 at TNBJ-AQMS1, serial 51143). The logger reads it over **Modbus TCP, read-only**
@@ -55,10 +55,10 @@ Compare:
 ## 5. Config
 Copy the `gc_alpha115` block from `config.example.yaml` into `config.yaml`, then set:
 - `host:` the GC's IP.
-- `options.components:` the numbers and units the probe printed. Keep the names `CH4` /
-  `TNMHC` / `THC`: those are the hourly-average columns on the server. The unit must be the
-  GC's unit or an exact conversion of it (ppb ↔ ppm). ppm ↔ mg/m³ needs a molecular weight, so
-  the value would stay blank.
+- `options.components:` the component numbers the probe printed. Keep the names `CH4` /
+  `NMHC` / `THC` (the GC calls NMHC "TNMHC"): those are the dashboard and hourly-average
+  columns. Keep `unit: ppb`, the dashboard unit: the GC's ppm converts exactly (×1000).
+  ppm ↔ mg/m³ needs a molecular weight, so the value would stay blank.
 - `max_age_minutes:` what the probe suggested (3 cycles or more).
 - `channel:` leave `1` unless the probe showed another channel for the ambient data.
 
@@ -66,7 +66,7 @@ Copy the `gc_alpha115` block from `config.example.yaml` into `config.yaml`, then
 ```
 .venv\Scripts\python -m aqms_logger.main --config config.yaml --once --no-mqtt
 ```
-- `CH4` / `TNMHC` equal the last results on the GC screen, status `0`.
+- `CH4` / `NMHC` equal the last results on the GC screen (×1000 if the GC shows ppm), status `0`.
 - `GC_STATUS` 0 and `GC_DATA_AGE` in seconds.
 - `4` (comm-fail) on every row: recheck host / port / unit and step 2.
 
@@ -74,11 +74,12 @@ Copy the `gc_alpha115` block from `config.example.yaml` into `config.yaml`, then
 ```
 nssm restart AQMS-Logger
 ```
-The log shows `gc_alpha115: GC component 1 'Methane' -> CH4 (ppm)` once per connection.
+The log shows `gc_alpha115: GC component 1 'Methane' -> CH4 (ppb)` once per connection.
 
 ## 8. Server
-The ingest adds the `CH4` / `TNMHC` / `GC_*` columns by itself on the first message.
-`ingest/schema.sql` includes CH4 and TNMHC in the hourly aggregate. A server whose
+The ingest adds the `CH4` / `NMHC` / `GC_*` columns by itself on the first message.
+`ingest/schema.sql` includes CH4, NMHC and THC in the hourly aggregate (THC is not filled
+yet). A server whose
 `readings_hourly` was created from an older schema.sql must recreate that view (TimescaleDB
 can't add columns to an existing continuous aggregate).
 
@@ -91,7 +92,7 @@ can't add columns to an existing continuous aggregate).
   after the air was sampled. `GC_DATA_AGE` (seconds, on the GC's own clock) records that lag.
 - **Read-only**: the logger only uses function 3 (read) and never writes. The map also has
   registers that start / stop runs and set the GC clock.
-- CH4 / TNMHC are **blank** while `GC_STATUS` is not 0 (max per minute, so a calibration
+- CH4 / NMHC are **blank** while `GC_STATUS` is not 0 (max per minute, so a calibration
   anywhere in the minute shows):
 
 | GC_STATUS | meaning | from |
