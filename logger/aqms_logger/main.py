@@ -60,7 +60,7 @@ def _print_readings(readings) -> None:
     print(f"\n{'device':<12}{'parameter':<22}{'value':>14}  {'unit':<9}status")
     print("-" * 63)
     for r in readings:
-        cell = "(no data)".rjust(14) if r.value is None else f"{r.value:>14.4g}"
+        cell = "(no data)".rjust(14) if r.value is None else f"{r.value:>14.7g}"
         print(f"{r.device:<12}{r.parameter:<22}{cell}  {r.unit:<9}{r.status}")
 
 

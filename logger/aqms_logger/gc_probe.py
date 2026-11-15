@@ -77,6 +77,18 @@ def suggest_parameter(name: str) -> str:
     return known or re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_") or "COMPONENT"
 
 
+def suggest_derived(units: dict[str, str]) -> str | None:
+    """The `derived:` line that completes CH4 / NMHC / THC from the two the GC reports
+    (`units` maps the suggested parameter names to their units)."""
+    def same_unit(a: str, b: str) -> bool:
+        return a in units and b in units and units[a] == units[b]
+    if "THC" not in units and same_unit("CH4", "NMHC"):
+        return "THC: CH4 + NMHC      # total hydrocarbons"
+    if "NMHC" not in units and same_unit("CH4", "THC"):
+        return "NMHC: THC - CH4      # non-methane hydrocarbons"
+    return None
+
+
 def suggest_unit(gc_unit: str | None) -> str:
     """Volume ratios are stored in ppb (the dashboard unit, converted exactly); other units as
     the GC reports them."""
@@ -190,6 +202,11 @@ def report(read: Read) -> list[str]:
             note = ("    # not calibrated on the GC - check" if unit is None
                     else f"    # GC reports {unit}; the logger converts" if unit != store else "")
             add(f"        {n}: {{ parameter: {suggest_parameter(name)}, unit: {store} }}{note}")
+        derived = suggest_derived({suggest_parameter(name): suggest_unit(unit)
+                                   for _, name, unit in found})
+        if derived:
+            add("      derived:")
+            add(f"        {derived}")
     return lines
 
 

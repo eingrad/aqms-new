@@ -11,6 +11,8 @@ GCAlpha software). Register map and decoding: synspec_gc_map.py (Synspec tech no
         components:             # GC component number -> parameter + unit to store
           1: { parameter: CH4,  unit: ppb }
           2: { parameter: NMHC, unit: ppb }     # the GC calls it "TNMHC"
+        derived:                # calculated per sample (optional): 'A + B' or 'A - B'
+          THC: CH4 + NMHC       # the GC doesn't report THC
         channel: 1              # stream-selector channel carrying ambient air (1 = no selector)
         max_age_minutes: 60     # values blank when no new run has finished for this long
         diagnostics: true       # also store status words, data age, inlet pressure, column flow
@@ -39,12 +41,17 @@ A component is also blank when the GC reports it "not calibrated" or in a unit t
 converted exactly to the configured one (ppb <-> ppm <-> vol%, ug/m3 <-> mg/m3 <-> g/m3); the
 log says so once. If the GC does not answer, every parameter is blank (comm-fail) and the GC
 is left alone for retry_seconds, so it cannot slow down the other devices.
+
+Derived values (TNBJ: THC = CH4 + NMHC, since the GC does not report THC) are calculated from
+the stored component values of the same sample: they share their unit and are blank whenever
+an input is blank.
 """
 from __future__ import annotations
 
 import inspect
 import logging
 import math
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -95,12 +102,54 @@ class Component:
 
 
 @dataclass(frozen=True)
+class Derived:
+    parameter: str                  # e.g. THC
+    left: str                       # component parameter, e.g. CH4
+    op: str                         # "+" or "-"
+    right: str                      # component parameter, e.g. NMHC
+    unit: str                       # the components' unit
+
+
+@dataclass(frozen=True)
 class Options:
     components: tuple[Component, ...]
     channel: int
     max_age_seconds: float
     diagnostics: bool
     retry_seconds: float
+    derived: tuple[Derived, ...] = ()
+
+
+_EXPRESSION = re.compile(r"^\s*([A-Za-z_]\w*)\s*([+-])\s*([A-Za-z_]\w*)\s*$")
+
+
+def _derived_options(raw, components: list[Component], where: str) -> tuple[Derived, ...]:
+    """options.derived: { THC: "CH4 + NMHC" } - sums / differences of two components."""
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where}: options.derived must map a name to 'A + B' or 'A - B'")
+    units = {c.parameter: c.unit for c in components}
+    taken = {p.lower() for p in units} | {STATUS_PARAM.lower()}
+    taken |= {p.lower() for p, _, _ in DIAGNOSTICS}
+    derived: list[Derived] = []
+    for name, expression in raw.items():
+        name = str(name)
+        match = _EXPRESSION.match(str(expression))
+        if not match:
+            raise ValueError(f"{where}: derived {name} must be 'A + B' or 'A - B', "
+                             f"got {expression!r}")
+        left, op, right = match.groups()
+        for operand in (left, right):
+            if operand not in units:
+                raise ValueError(f"{where}: derived {name} uses {operand}, which is not one of "
+                                 "the components")
+        if units[left] != units[right]:
+            raise ValueError(f"{where}: derived {name} combines {units[left]} and "
+                             f"{units[right]} - give both components the same unit")
+        if name.lower() in taken:
+            raise ValueError(f"{where}: derived name {name} is already used")
+        taken.add(name.lower())
+        derived.append(Derived(name, left, op, right, units[left]))
+    return tuple(derived)
 
 
 def options_for(device: DeviceConfig) -> Options:
@@ -136,13 +185,15 @@ def options_for(device: DeviceConfig) -> Options:
         max_age_seconds=max_age * 60.0,
         diagnostics=bool(o.get("diagnostics", True)),
         retry_seconds=float(o.get("retry_seconds", 30)),
+        derived=_derived_options(o.get("derived") or {}, components, where),
     )
 
 
 def parameters(device: DeviceConfig) -> list[str]:
     """Parameter names this device produces (used to create the SQLite columns)."""
     opts = options_for(device)
-    names = [c.parameter for c in opts.components] + [STATUS_PARAM]
+    names = [c.parameter for c in opts.components] + [d.parameter for d in opts.derived]
+    names.append(STATUS_PARAM)
     if opts.diagnostics:
         names += [p for p, _, _ in DIAGNOSTICS]
     return names
@@ -157,6 +208,7 @@ def reductions(devices) -> tuple[set[str], set[str]]:
             continue
         opts = options_for(d)
         last |= {c.parameter for c in opts.components}
+        last |= {d.parameter for d in opts.derived}
         maximum.add(STATUS_PARAM)
         if opts.diagnostics:
             last |= {p for p, _, how in DIAGNOSTICS if how == "last"}
@@ -330,6 +382,7 @@ class SynspecGcAdapter(SourceAdapter):
         code = gc.state_code(status, self.opts.channel, self._stale(snap["run"], age))
 
         out: list[Reading] = []
+        stored: dict[str, float | None] = {}
         for c in self.opts.components:
             raw = self._float(snap["values"], 2 * (c.number - 1))
             factor = self._unit_factor(c, snap["units"][c.number - 1])
@@ -339,7 +392,18 @@ class SynspecGcAdapter(SourceAdapter):
                 value, value_status = None, STATUS_OUT_OF_RANGE
             else:
                 value, value_status = tidy(raw * factor), STATUS_VALID
+            stored[c.parameter] = value
             out.append(Reading(now, self.station_id, self.name, c.parameter, value, c.unit,
+                               value_status))
+        for d in self.opts.derived:                     # e.g. THC = CH4 + NMHC
+            a, b = stored[d.left], stored[d.right]
+            if code != gc.OK:
+                value, value_status = None, _VALUE_STATUS[code]
+            elif a is None or b is None:
+                value, value_status = None, STATUS_OUT_OF_RANGE
+            else:
+                value, value_status = tidy(a + b if d.op == "+" else a - b), STATUS_VALID
+            out.append(Reading(now, self.station_id, self.name, d.parameter, value, d.unit,
                                value_status))
         out.append(Reading(now, self.station_id, self.name, STATUS_PARAM, float(code), "code",
                            STATUS_VALID))
@@ -361,6 +425,7 @@ class SynspecGcAdapter(SourceAdapter):
 
     def _comm_fail(self, now: datetime) -> list[Reading]:
         units = {c.parameter: c.unit for c in self.opts.components}
+        units.update({d.parameter: d.unit for d in self.opts.derived})
         units[STATUS_PARAM] = "code"
         units.update({p: u for p, u, _ in DIAGNOSTICS})
         return [Reading(now, self.station_id, self.name, p, None, units[p], STATUS_COMM_FAIL)
