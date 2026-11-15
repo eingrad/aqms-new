@@ -381,10 +381,11 @@ def test_config_example_has_the_gc_without_column_clashes(monkeypatch):
     gc_dev = [d for d in cfg.devices if d.type == "synspec_gc"]
     assert len(gc_dev) == 1 and gc_dev[0].port == 9882 and gc_dev[0].unit_id == 1
     params = _configured_parameters(cfg.devices)
-    for p in ["CH4", "NMHC", "GC_STATUS"] + [d[0] for d in DIAGNOSTICS]:
+    for p in ["CH4", "NMHC", "THC", "GC_STATUS"] + [d[0] for d in DIAGNOSTICS]:
         assert p in params
     comps = gc_dev[0].options["components"]
     assert {c["parameter"]: c["unit"] for c in comps.values()} == {"CH4": "ppb", "NMHC": "ppb"}
+    assert gc_dev[0].options["derived"] == {"THC": "CH4 + NMHC"}
     assert len({p.lower() for p in params}) == len(params)      # SQLite ignores case
 
 
@@ -397,7 +398,8 @@ def test_probe_report_shows_what_to_compare():
                      "13-11-2026 22:40:35 (text)", "13-11-2026 22:35:00 (bcd)", "335 s",
                      "cycle about 240 s", "2.88 bar", "GC_STATUS 0", "Methane", "TNMHC",
                      "1: { parameter: CH4, unit: ppb }    # GC reports ppm; the logger converts",
-                     "2: { parameter: NMHC, unit: ppb }    # GC reports ppm; the logger converts"):
+                     "2: { parameter: NMHC, unit: ppb }    # GC reports ppm; the logger converts",
+                     "derived:", "THC: CH4 + NMHC"):
         assert expected in text, expected
     assert read.errors == [] and fake.writes == []
 
@@ -420,3 +422,59 @@ def test_suggested_parameter_names():
     assert suggest_parameter("m/p-Xylene") == "M_P_XYLENE"
     assert suggest_unit("ppm") == "ppb" and suggest_unit("ppb") == "ppb"
     assert suggest_unit("ug/m3") == "ug/m3"           # mass units can't become ppb
+
+
+# ---- derived values: THC = CH4 + NMHC ------------------------------------------------------------
+THC = {"THC": "CH4 + NMHC"}
+SCREEN = {"values": {1: 2187.75, 2: 280.17}, "units": {1: 2, 2: 2}}   # GC screen 2026-11-15, v-ppb
+
+
+def test_thc_is_ch4_plus_nmhc():
+    out = by_param(adapter(FakeGc(gc_memory(**SCREEN)), derived=THC).read(NOW))
+    assert out["CH4"].value == 2187.75 and out["NMHC"].value == 280.17
+    assert out["THC"].value == 2467.92 and out["THC"].unit == "ppb"
+    assert out["THC"].status == STATUS_VALID
+    assert list(out)[:4] == ["CH4", "NMHC", "THC", "GC_STATUS"]
+    assert "THC" in reductions([device(derived=THC)])[0]          # last per minute, like CH4
+
+
+def test_nmhc_can_be_derived_as_thc_minus_ch4():
+    fake = FakeGc(gc_memory(values={1: 2187.75, 2: 2467.92}, units={1: 2, 2: 2}))
+    comps = {1: {"parameter": "CH4", "unit": "ppb"}, 2: {"parameter": "THC", "unit": "ppb"}}
+    out = by_param(adapter(fake, components=comps, derived={"NMHC": "THC - CH4"}).read(NOW))
+    assert out["NMHC"].value == 280.17
+
+
+@pytest.mark.parametrize("memory,status", [
+    ({"values": {1: 2187.75, 2: math.nan}}, STATUS_OUT_OF_RANGE),       # an input is blank
+    ({"s183": NORMAL_183 | 1 << 3}, STATUS_CALIBRATION),                # GC calibrating
+])
+def test_thc_is_blank_when_an_input_is(memory, status):
+    out = by_param(adapter(FakeGc(gc_memory(**memory)), derived=THC).read(NOW))
+    assert out["THC"].value is None and out["THC"].status == status
+
+
+def test_thc_is_comm_fail_when_the_gc_is_down():
+    fake = FakeGc(gc_memory())
+    fake.refuse = True
+    out = by_param(adapter(fake, derived=THC).read(NOW))
+    assert out["THC"].value is None and out["THC"].status == STATUS_COMM_FAIL
+    assert out["THC"].unit == "ppb"
+
+
+@pytest.mark.parametrize("derived", [
+    {"THC": "CH4 * NMHC"},                 # only + and -
+    {"THC": "CH4 + XYZ"},                  # not a component
+    {"CH4": "CH4 + NMHC"},                 # name already used
+    {"GC_STATUS": "CH4 + NMHC"},
+    "THC = CH4 + NMHC",                    # not a mapping
+])
+def test_bad_derived_options_are_rejected(derived):
+    with pytest.raises(ValueError):
+        SynspecGcAdapter(device(derived=derived), "TEST", client=FakeGc({}))
+
+
+def test_derived_inputs_need_the_same_unit():
+    comps = {1: {"parameter": "CH4", "unit": "ppb"}, 2: {"parameter": "NMHC", "unit": "ppm"}}
+    with pytest.raises(ValueError):
+        SynspecGcAdapter(device(components=comps, derived=THC), "TEST", client=FakeGc({}))

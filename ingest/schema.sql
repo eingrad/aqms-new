@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS readings (
     "NO2"       double precision,
     -- Synspec Alpha 115 GC, ppb: methane, non-methane hydrocarbons (the GC's "TNMHC") and
     -- total hydrocarbons. One result per GC run; the logger stores the held result every
-    -- minute. THC is not filled yet.
+    -- minute. THC = CH4 + NMHC is calculated by the logger (the GC doesn't report it).
     "CH4"       double precision,
     "NMHC"      double precision,
     "THC"       double precision,

@@ -60,7 +60,8 @@ ABCD. The adapter reads the blocks itself; only the component numbers and units 
 | Last run date / time | 2135 | 7 | "BCD" per E066 | GC_DATA_AGE; layout auto-detected (text / BCD / binary) |
 
 The status bits that blank the values are listed in commissioning-gc.md; all bit meanings are in
-`logger/aqms_logger/synspec_gc_map.py` (`STATUS_BITS`).
+`logger/aqms_logger/synspec_gc_map.py` (`STATUS_BITS`). THC is not a GC register: the logger
+calculates THC = CH4 + NMHC (`options.derived`).
 
 ## <device name> — blank template
 | Parameter | Addr | Regs | Type | Function | Unit | Scale | Offset | Notes |

@@ -140,7 +140,9 @@ devices:
   # and THIS PC's IP on a TCP-IPn line of the GC's ID file (else "Hacker alarm").
   #   - one result per GC run: each minute stores the result on the GC outputs at the
   #     end of that minute (not a mean). GC_DATA_AGE = seconds since that run (GC clock)
-  #   - CH4 / NMHC are blank while GC_STATUS is not 0 (max per minute):
+  #   - the GC measures CH4 and TNMHC (= NMHC); THC = CH4 + NMHC is calculated here
+  #     (correct only if the GC's TNMHC is calibrated as methane-equivalent)
+  #   - CH4 / NMHC / THC are blank while GC_STATUS is not 0 (max per minute):
   #       1 stale (no new run for max_age_minutes)   2 other stream-selector channel
   #       3 maintenance   4 calibration / validation / span-zero gas data on the outputs
   #       5 output invalid / starting up / FID flame error / first run after a restart
@@ -158,7 +160,8 @@ devices:
       components:              # GC component number -> parameter + unit stored (confirm with gc_probe)
         1: { parameter: CH4,  unit: ppb }     # methane
         2: { parameter: NMHC, unit: ppb }     # non-methane hydrocarbons (the GC calls it "TNMHC")
-        # 3: { parameter: THC, unit: ppb }    # total hydrocarbons - not filled yet
+      derived:                 # calculated per GC result; blank whenever an input is blank
+        THC: CH4 + NMHC        # total hydrocarbons, so NMHC = THC - CH4 always holds
       channel: 1               # stream-selector channel with ambient air (1 = no selector)
       max_age_minutes: 60      # blank the values if no new run finished for this long (> 2 cycles)
       diagnostics: true        # GC_STATUS_181/183/184, GC_ERRORS_185/186, GC_DATA_AGE, pressure, flow

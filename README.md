@@ -29,7 +29,7 @@ Replacement data pipeline for the TNBJ air-quality station. Instruments are read
 - [x] 3 — MQTT publisher, server ingest, TimescaleDB schema
 - [x] 4 — store-and-forward + backfill
 - [~] 5 — FPI gas source: `fpi_mysql` adapter **built + tested** (needs real AQMS-Plus schema values in config); `hj212_receiver` fallback not built (only if MySQL is unreachable)
-- [~] GC — `synspec_gc` adapter for the Synspec Alpha 115 (CH4 / NMHC in ppb; THC not yet) **built + tested**, read-only; on-site commissioning pending ([docs/commissioning-gc.md](docs/commissioning-gc.md))
+- [~] GC — `synspec_gc` adapter for the Synspec Alpha 115 (CH4 / NMHC measured, THC = CH4 + NMHC calculated; ppb) **built + tested**, read-only; on-site commissioning pending ([docs/commissioning-gc.md](docs/commissioning-gc.md))
 - [ ] 6 — hourly continuous aggregate + 75% validity + retention (schema.sql ready; enable on server)
 - [ ] 7 — service packaging (NSSM / systemd), docs
 
