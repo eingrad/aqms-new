@@ -141,7 +141,7 @@ devices:
   #   - one result per GC run: each minute stores the result on the GC outputs at the
   #     end of that minute (not a mean). GC_DATA_AGE = seconds since that run (GC clock)
   #   - the GC measures CH4 and TNMHC (= NMHC); THC = CH4 + NMHC is calculated here
-  #     (correct only if the GC's TNMHC is calibrated as methane-equivalent)
+  #     (right because the GC's TNMHC is calibrated as methane-equivalent, confirmed 2026-11-15)
   #   - CH4 / NMHC / THC are blank while GC_STATUS is not 0 (max per minute):
   #       1 stale (no new run for max_age_minutes)   2 other stream-selector channel
   #       3 maintenance   4 calibration / validation / span-zero gas data on the outputs

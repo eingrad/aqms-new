@@ -60,10 +60,11 @@ Copy the `gc_alpha115` block from `config.example.yaml` into `config.yaml`, then
   columns. Keep `unit: ppb`, the dashboard unit: the GC's ppm converts exactly (×1000).
   ppm ↔ mg/m³ needs a molecular weight, so the value would stay blank.
 - `options.derived:` keep `THC: CH4 + NMHC`. The GC doesn't report THC, so the logger adds
-  the two from the same result, and NMHC = THC − CH4 always holds. This is only correct if
-  the GC's TNMHC is calibrated as methane-equivalent: check its calibration settings (or ask
-  Synspec). If the probe shows the GC reports THC instead of TNMHC, map THC as a component
-  and use `NMHC: THC - CH4`; the probe prints the right line.
+  the two from the same result, and NMHC = THC − CH4 always holds. The plain sum is right
+  because this GC's TNMHC is calibrated as methane-equivalent (confirmed 2026-11-15: TNMHC
+  span 5.23 v-ppm, datafile V_132157.BIN). If TNMHC were ever calibrated as propane instead,
+  THC would need CH4 + 3 × TNMHC. If the probe shows a GC that reports THC instead of
+  TNMHC, map THC as a component and use `NMHC: THC - CH4`; the probe prints the right line.
 - `max_age_minutes:` what the probe suggested (3 cycles or more).
 - `channel:` leave `1` unless the probe showed another channel for the ambient data.
 
