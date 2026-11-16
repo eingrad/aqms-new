@@ -1,26 +1,26 @@
 # AQMS station logger configuration.
 # Copy to config.yaml and edit. Secrets come from .env via ${VAR} placeholders.
 
-station_id: TNBJ-AQMS1
-sample_interval_seconds: 5     # how often to sample within each minute (averaged into the stored value)
-poll_interval_seconds: 60      # store/publish cadence: one AVERAGED row per minute (UTC)
-sqlite_path: aqms_logger.db    # local store #1 (also the store-and-forward buffer)
-retention_days: 30             # prune SYNCED rows older than this from SQLite
+station_id: example_station_id # unique station ID (used in MQTT topic and SQLite table)
+sample_interval_seconds: 5 # how often to sample within each minute (averaged into the stored value)
+poll_interval_seconds: 60 # store/publish cadence: one AVERAGED row per minute (UTC)
+sqlite_path: example.db # local store #1 (also the store-and-forward buffer)
+retention_days: 30 # prune SYNCED rows older than this from SQLite
 
 # MQTT to the server broker via the Cloudflare tunnel (MQTT-over-WebSocket-Secure).
 # The broker isn't exposed as raw TCP, so we connect as WSS to mqtt.myaqms.com:443;
 # Cloudflare provides the TLS at its edge (tls: true, no custom CA needed).
 mqtt:
-  host: mqtt.myaqms.com        # the Cloudflare public hostname for the AQMS broker
-  port: 443
-  transport: websockets        # MQTT-over-WebSocket (required through Cloudflare)
-  tls: true                    # trust Cloudflare's edge cert (system CA store)
+  host: example.com # the Cloudflare public hostname for the AQMS broker
+  port: 44333
+  transport: websockets # MQTT-over-WebSocket (required through Cloudflare)
+  tls: true # trust Cloudflare's edge cert (system CA store)
   ws_path: /mqtt
-  username: aqms_station
-  password: ${MQTT_PASSWORD}
-  base_topic: aqms             # publishes to  aqms/<station_id>/readings
+  username: exampleuser
+  password: $examplepass
+  base_topic: example # publishes to  aqms/<station_id>/readings
   qos: 1
-  client_id: aqms-logger-TNBJ-AQMS1
+  client_id: exampleclientid
 
 # Redis now lives on the SERVER and is written by the ingest service (not the logger),
 # because the server's Redis is internal-only. Keep the logger's Redis DISABLED.
@@ -38,27 +38,117 @@ devices:
   # ---------------------------------------------------------------------------
   # NOTE: on the Fidas "3rd party protocols" screen, set  Modbus modus: TCP
   # (it ships as RTU/serial). TCP is inactive until you switch it — port 502 then serves.
-  - name: fidas200
+  - name: example_fidas200
     type: modbus_tcp
-    host: 192.168.13.123       # Fidas IP seen on-device: 192.168.13.123 (lan) or 172.22.132.254; use the one the logger PC can reach
-    port: 502
-    unit_id: 0                 # Fidas "Modbus address" = 0 (from the device screen)
-    timeout: 2.0               # Palas recommends a 2000 ms timeout
-    retries: 3                 # ...and retry >=3x on timeout
-    word_order: ABCD           # device default; can be overridden per register
+    host: xxx.xxx.xxx.xxx
+    port: xxx
+    unit_id: 0 # Fidas "Modbus address" = 0 (from the device screen)
+    timeout: 2.0 # Palas recommends a 2000 ms timeout
+    retries: 3 # ...and retry >=3x on timeout
+    word_order: ABCD # device default; can be overridden per register
     registers:
-      - { parameter: Cn,      address: 37, count: 2, type: float32, function: input, unit: "P/cm3" }
-      - { parameter: PM1,     address: 39, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
-      - { parameter: PM2_5,   address: 41, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
-      - { parameter: PM4,     address: 43, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
-      - { parameter: PM10,    address: 45, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }
-      - { parameter: TSP,     address: 47, count: 2, type: float32, function: input, scale: 1000, unit: "ug/m3" }  # PMtotal
-      - { parameter: TEMP,    address: 49, count: 2, type: float32, function: input, unit: "degC" }
-      - { parameter: PRESSURE, address: 51, count: 2, type: float32, function: input, unit: "hPa" }
-      - { parameter: HUMIDITY, address: 53, count: 2, type: float32, function: input, unit: "%" }
-      - { parameter: WSP,     address: 61, count: 2, type: float32, function: input, unit: "km/h" }   # ×0.27778 for m/s
-      - { parameter: WDIR,    address: 63, count: 2, type: float32, function: input, unit: "deg", average: circular }  # angular mean
-      - { parameter: PRECIP,  address: 65, count: 2, type: float32, function: input, unit: "l/m2/h" }
+      - {
+          parameter: Cn,
+          address: 37,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "P/cm3",
+        }
+      - {
+          parameter: PM1,
+          address: 39,
+          count: 2,
+          type: float32,
+          function: input,
+          scale: 1000,
+          unit: "ug/m3",
+        }
+      - {
+          parameter: PM2_5,
+          address: 41,
+          count: 2,
+          type: float32,
+          function: input,
+          scale: 1000,
+          unit: "ug/m3",
+        }
+      - {
+          parameter: PM4,
+          address: 43,
+          count: 2,
+          type: float32,
+          function: input,
+          scale: 1000,
+          unit: "ug/m3",
+        }
+      - {
+          parameter: PM10,
+          address: 45,
+          count: 2,
+          type: float32,
+          function: input,
+          scale: 1000,
+          unit: "ug/m3",
+        }
+      - {
+          parameter: TSP,
+          address: 47,
+          count: 2,
+          type: float32,
+          function: input,
+          scale: 1000,
+          unit: "ug/m3",
+        } # PMtotal
+      - {
+          parameter: TEMP,
+          address: 49,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "degC",
+        }
+      - {
+          parameter: PRESSURE,
+          address: 51,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "hPa",
+        }
+      - {
+          parameter: HUMIDITY,
+          address: 53,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "%",
+        }
+      - {
+          parameter: WSP,
+          address: 61,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "km/h",
+        } # ×0.27778 for m/s
+      - {
+          parameter: WDIR,
+          address: 63,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "deg",
+          average: circular,
+        } # angular mean
+      - {
+          parameter: PRECIP,
+          address: 65,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "l/m2/h",
+        }
 
       # --- Fidas 200 analyzer status/health (Palas "General data" block, input FC04) ---
       # Stored for status monitoring (no dashboard yet). float32 values (flow/internal
@@ -72,26 +162,109 @@ devices:
       #   AVG_TIME_PSD 0=auto/1s 1=auto/10s 2=auto/60s 3=auto/120s 4=-- 5=manual (see holding addr 5)
       # NOTE: internal TEMP/HUMIDITY here are the analyzer interior — distinct from the
       # weather-station (outside) TEMP@49 / HUMIDITY@53 above.
-      - { parameter: MODUS,             address: 11, count: 1, type: uint16,  function: input,   average: last, unit: "code" }
-      - { parameter: MESSAGE,           address: 12, count: 1, type: uint16,  function: input,   average: last, unit: "code" }
-      - { parameter: COINCIDENCE,       address: 13, count: 1, type: uint16,  function: input,   average: max,  unit: "code" }
-      - { parameter: FLOW,              address: 14, count: 2, type: float32, function: input,   unit: "l/min" }
-      - { parameter: TEMP_ANALYZER,     address: 16, count: 2, type: float32, function: input,   unit: "degC" }
-      - { parameter: HUMIDITY_ANALYZER, address: 18, count: 2, type: float32, function: input,   unit: "%" }
+      - {
+          parameter: MODUS,
+          address: 11,
+          count: 1,
+          type: uint16,
+          function: input,
+          average: last,
+          unit: "code",
+        }
+      - {
+          parameter: MESSAGE,
+          address: 12,
+          count: 1,
+          type: uint16,
+          function: input,
+          average: last,
+          unit: "code",
+        }
+      - {
+          parameter: COINCIDENCE,
+          address: 13,
+          count: 1,
+          type: uint16,
+          function: input,
+          average: max,
+          unit: "code",
+        }
+      - {
+          parameter: FLOW,
+          address: 14,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "l/min",
+        }
+      - {
+          parameter: TEMP_ANALYZER,
+          address: 16,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "degC",
+        }
+      - {
+          parameter: HUMIDITY_ANALYZER,
+          address: 18,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "%",
+        }
       # Additional diagnostics — all inside the input span already being read, so
       # these cost NO extra Modbus requests (the block read just gets sliced further).
-      - { parameter: FLOW_OUTPUT_LEVEL, address: 26, count: 2, type: float32, function: input,   unit: "%" }
-      - { parameter: TEMP_LED,          address: 34, count: 2, type: float32, function: input,   unit: "degC" }
+      - {
+          parameter: FLOW_OUTPUT_LEVEL,
+          address: 26,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "%",
+        }
+      - {
+          parameter: TEMP_LED,
+          address: 34,
+          count: 2,
+          type: float32,
+          function: input,
+          unit: "degC",
+        }
       # Bit-flag words: a numeric mean is meaningless, so take the state at the
       # minute boundary. `max` is NOT used here — for a multi-bit word it is a
       # numeric max, not a bitwise OR, so it can silently drop a low bit that was
       # set in an earlier sample. Decode the individual bits at display time.
-      - { parameter: DIGITAL_INPUTS,    address: 36, count: 1, type: uint16,  function: input,   average: last, unit: "bitfield" }
-      - { parameter: STATUS,            address: 67, count: 1, type: uint16,  function: input,   average: last, unit: "bitfield" }
+      - {
+          parameter: DIGITAL_INPUTS,
+          address: 36,
+          count: 1,
+          type: uint16,
+          function: input,
+          average: last,
+          unit: "bitfield",
+        }
+      - {
+          parameter: STATUS,
+          address: 67,
+          count: 1,
+          type: uint16,
+          function: input,
+          average: last,
+          unit: "bitfield",
+        }
       # selected averaging time for particle size distribution — settings/HOLDING reg (FC03).
       # Its current value is readable; separate function group, so an FC03 failure only
       # NULLs this one parameter (the input block above is unaffected).
-      - { parameter: AVG_TIME_PSD,      address: 3,  count: 1, type: uint16,  function: holding, average: last, unit: "code" }
+      - {
+          parameter: AVG_TIME_PSD,
+          address: 3,
+          count: 1,
+          type: uint16,
+          function: holding,
+          average: last,
+          unit: "code",
+        }
 
   # ---------------------------------------------------------------------------
   # FPI gas analyzers — read DIRECTLY over TCP port 10000 with FPI's own protocol
@@ -105,31 +278,31 @@ devices:
   #   - diagnostics: flow (cc/min), pressure (psia), temperatures (degC), O3 volts
   # Check a single round with:  python -m aqms_logger.main --config config.yaml --once --no-mqtt
   # ---------------------------------------------------------------------------
-  - name: fpi_o3
+  - name: example_fpi_o3
     type: fpi_tcp
-    host: 192.168.13.40        # AQMS-300
-    port: 10000
-    timeout: 1.5               # seconds per reply
+    host: xxx.xxx.xxx.xxx # AQMS-300
+    port: xxx
+    timeout: 1.5 # seconds per reply
     options: { model: AQMS-300, unit: ppb, diagnostics: true }
 
-  - name: fpi_co
+  - name: example_fpi_co
     type: fpi_tcp
-    host: 192.168.13.70        # AQMS-400
-    port: 10000
+    host: xxx.xxx.xxx.xxx # AQMS-400
+    port: xxx
     timeout: 1.5
     options: { model: AQMS-400, unit: ppm, diagnostics: true }
 
-  - name: fpi_so2
+  - name: example_fpi_so2
     type: fpi_tcp
-    host: 192.168.13.10        # AQMS-500
-    port: 10000
+    host: xxx.xxx.xxx.xxx # AQMS-500
+    port: xxx
     timeout: 1.5
     options: { model: AQMS-500, unit: ppb, diagnostics: true }
 
-  - name: fpi_nox
+  - name: example_fpi_nox
     type: fpi_tcp
-    host: 192.168.13.1         # AQMS-600 (NO, NO2, NOX)
-    port: 10000
+    host: xxx.xxx.xxx.xxx # AQMS-600 (NO, NO2, NOX)
+    port: xxx
     timeout: 1.5
     options: { model: AQMS-600, unit: ppb, diagnostics: true }
 
@@ -152,50 +325,16 @@ devices:
   # ---------------------------------------------------------------------------
   - name: gc_alpha115
     type: synspec_gc
-    host: 192.168.13.XXX       # <-- the GC's IP address (ipconfig on the GC PC)
-    port: 9882                 # the TCP column in the GC's Datalogger Settings
-    unit_id: 1                 # "Adress: 001" in Datalogger Settings
+    host: xxx.xxx.xxx.xxx # <-- the GC's IP address (ipconfig on the GC PC)
+    port: xxxx # the TCP column in the GC's Datalogger Settings
+    unit_id: 1 # "Adress: 001" in Datalogger Settings
     timeout: 2.0
     options:
-      components:              # GC component number -> parameter + unit stored (confirm with gc_probe)
-        1: { parameter: CH4,  unit: ppb }     # methane
-        2: { parameter: NMHC, unit: ppb }     # non-methane hydrocarbons (the GC calls it "TNMHC")
-      derived:                 # calculated per GC result; blank whenever an input is blank
-        THC: CH4 + NMHC        # total hydrocarbons, so NMHC = THC - CH4 always holds
-      channel: 1               # stream-selector channel with ambient air (1 = no selector)
-      max_age_minutes: 60      # blank the values if no new run finished for this long (> 2 cycles)
-      diagnostics: true        # GC_STATUS_181/183/184, GC_ERRORS_185/186, GC_DATA_AGE, pressure, flow
-
-  # ---------------------------------------------------------------------------
-  # ALTERNATIVE (not needed now that fpi_tcp reads the analyzers directly):
-  # FPI gases (O3/SO2/CO/NOx) — PHASE 5, Option A. Reads FPI's AQMS-Plus MySQL.
-  # Adapter is built and unit-tested; UNCOMMENT and fill the real schema values
-  # once `Test-NetConnection <DAS_IP> -Port 3306` succeeds and the DAS tables are
-  # inspected. table / time_column / columns below are PLACEHOLDER names.
-  # ---------------------------------------------------------------------------
-  # - name: fpi_gases
-  #   type: fpi_mysql
-  #   options:
-  #     host: ${FPI_MYSQL_HOST}
-  #     port: ${FPI_MYSQL_PORT}
-  #     database: ${FPI_MYSQL_DB}
-  #     user: ${FPI_MYSQL_USER}
-  #     password: ${FPI_MYSQL_PASSWORD}
-  #     table: realtime_data           # <-- real DAS table name
-  #     time_column: data_time         # <-- its timestamp column
-  #     device_time_is_utc: false      # DAS timestamps are usually LOCAL time
-  #     max_age_seconds: 120           # a DAS row older than this -> comm-fail
-  #     columns:                       # parameter: db_column  (confirm 300/400/500/600 mapping)
-  #       O3:  o3_conc
-  #       SO2: so2_conc
-  #       CO:  co_conc
-  #       NOX: nox_conc
-  #       NO:  no_conc
-  #       NO2: no2_conc
-  #     units:
-  #       O3: ug/m3
-  #       SO2: ug/m3
-  #       CO: mg/m3
-  #       NOX: ug/m3
-  #       NO: ug/m3
-  #       NO2: ug/m3
+      components: # GC component number -> parameter + unit stored (confirm with gc_probe)
+        1: { parameter: CH4, unit: ppb } # methane
+        2: { parameter: NMHC, unit: ppb } # non-methane hydrocarbons (the GC calls it "TNMHC")
+      derived: # calculated per GC result; blank whenever an input is blank
+        THC: CH4 + NMHC # total hydrocarbons, so NMHC = THC - CH4 always holds
+      channel: 1 # stream-selector channel with ambient air (1 = no selector)
+      max_age_minutes: 60 # blank the values if no new run finished for this long (> 2 cycles)
+      diagnostics: true # GC_STATUS_181/183/184, GC_ERRORS_185/186, GC_DATA_AGE, pressure, flow
