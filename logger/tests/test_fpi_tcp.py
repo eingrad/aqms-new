@@ -289,5 +289,5 @@ def test_config_example_creates_fpi_columns(monkeypatch):
               "PM2_5", "STATUS"):
         assert p in params
     assert len({p.lower() for p in params}) == len(params)      # no clashes (SQLite ignores case)
-    units = {d.name: d.options["unit"] for d in cfg.devices if d.type == "fpi_tcp"}
-    assert units == {"fpi_o3": "ppb", "fpi_co": "ppm", "fpi_so2": "ppb", "fpi_nox": "ppb"}
+    units = {d.options["model"]: d.options["unit"] for d in cfg.devices if d.type == "fpi_tcp"}
+    assert units == {"AQMS-300": "ppb", "AQMS-400": "ppm", "AQMS-500": "ppb", "AQMS-600": "ppb"}

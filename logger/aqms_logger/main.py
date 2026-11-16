@@ -15,10 +15,8 @@ import time
 from datetime import datetime, timezone
 
 from . import forwarder
-from .adapters import build_adapter
-from .adapters.fpi_tcp import parameters as fpi_tcp_parameters
+from .adapters import build_adapter, device_parameters
 from .adapters.fpi_tcp import status_parameters as fpi_tcp_status_parameters
-from .adapters.synspec_gc import parameters as synspec_gc_parameters
 from .adapters.synspec_gc import reductions as synspec_gc_reductions
 from .aggregator import MinuteAggregator
 from .config import load_config
@@ -35,13 +33,7 @@ def _configured_parameters(devices) -> list[str]:
     """All parameter names across configured devices (for wide-table columns)."""
     params: list[str] = []
     for d in devices:
-        params += [r.parameter for r in d.registers]
-        if d.type == "fpi_mysql":
-            params += list(d.options.get("columns", {}).keys())
-        elif d.type == "fpi_tcp":
-            params += fpi_tcp_parameters(d)
-        elif d.type == "synspec_gc":
-            params += synspec_gc_parameters(d)
+        params += device_parameters(d)
     seen, ordered = set(), []
     for p in params:
         if p not in seen:
@@ -111,7 +103,9 @@ def run(config_path: str, once: bool = False, no_mqtt: bool = False) -> None:
     if no_mqtt:
         log.info("MQTT disabled (--no-mqtt): readings are written to SQLite only")
     else:
-        publisher = MqttPublisher(cfg.mqtt)
+        # online/offline flag for the server watchdog; not for a --once spot read
+        publisher = MqttPublisher(cfg.mqtt, status_topic=None if once else cfg.status_topic,
+                                  station_id=cfg.station_id)
         publisher.connect()
 
     live = LivePublisher(cfg.redis)

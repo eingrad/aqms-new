@@ -379,7 +379,7 @@ def test_config_example_has_the_gc_without_column_clashes(monkeypatch):
     monkeypatch.setenv("MQTT_PASSWORD", "x")
     cfg = load_config(os.path.join(os.path.dirname(__file__), "..", "config.example.yaml"))
     gc_dev = [d for d in cfg.devices if d.type == "synspec_gc"]
-    assert len(gc_dev) == 1 and gc_dev[0].port == 9882 and gc_dev[0].unit_id == 1
+    assert len(gc_dev) == 1 and gc_dev[0].unit_id == 1     # host / port are placeholders
     params = _configured_parameters(cfg.devices)
     for p in ["CH4", "NMHC", "THC", "GC_STATUS"] + [d[0] for d in DIAGNOSTICS]:
         assert p in params

@@ -5,8 +5,22 @@ from ..config import DeviceConfig
 from .base import SourceAdapter
 from .fpi_mysql import FpiMysqlAdapter
 from .fpi_tcp import FpiTcpAdapter
+from .fpi_tcp import parameters as fpi_tcp_parameters
 from .modbus_tcp import ModbusTcpAdapter
 from .synspec_gc import SynspecGcAdapter
+from .synspec_gc import parameters as synspec_gc_parameters
+
+
+def device_parameters(device: DeviceConfig) -> list[str]:
+    """Every parameter name one device produces, in config order."""
+    params = [r.parameter for r in device.registers]
+    if device.type == "fpi_mysql":
+        params += list(device.options.get("columns", {}).keys())
+    elif device.type == "fpi_tcp":
+        params += fpi_tcp_parameters(device)
+    elif device.type == "synspec_gc":
+        params += synspec_gc_parameters(device)
+    return params
 
 
 def build_adapter(device: DeviceConfig, station_id: str) -> SourceAdapter:

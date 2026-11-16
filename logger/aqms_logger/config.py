@@ -100,6 +100,11 @@ class LoggerConfig:
         return f"{self.mqtt.base_topic}/{self.station_id}/readings"
 
     @property
+    def status_topic(self) -> str:
+        """Retained online/offline flag of this logger (read by the server watchdog)."""
+        return f"{self.mqtt.base_topic}/{self.station_id}/logger"
+
+    @property
     def circular_params(self) -> set[str]:
         return {r.parameter for d in self.devices for r in d.registers if r.average == "circular"}
 
