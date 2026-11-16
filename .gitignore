@@ -10,6 +10,7 @@ logger/config.yaml
 *.db-shm
 *.sqlite
 *.sqlite3
+*.zip
 
 # python
 .venv/
