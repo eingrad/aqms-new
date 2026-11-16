@@ -1,0 +1,103 @@
+# AQMS watchdog - Telegram / email alert when a station or one of its instruments stops sending
+# data, a reminder while it lasts, and a message when it recovers. Setup: watchdog/README.md
+# No secrets in this file: every ${VAR} comes from server/.env (empty if not set).
+
+mqtt:
+  host: aqms-mqtt # the broker container, inside aqms-net
+  port: 1883
+  username: aqms_ingest # read-only on aqms/# (server/mosquitto/acl)
+  password: ${AQMS_MQTT_INGEST_PASSWORD}
+  client_id: aqms-watchdog
+  base_topic: aqms # watches aqms/+/readings and aqms/+/logger
+
+utc_offset_hours: 8 # times in the messages (Malaysia = UTC+8)
+check_interval_seconds: 30
+repeat_hours: 6 # remind every 6 h while a problem lasts (0 = never)
+daily_report: "08:00" # one "all OK / N problems" message a day, local time ("" = off)
+
+# Same Telegram bot and SMTP2GO account as the dashboard (TNB---AQMS-01): the bot token and
+# SMTP_* values are copied from it, with the same names. Only the recipients are the
+# watchdog's own (ALERT_*). An empty channel is skipped.
+notify:
+  telegram:
+    bot_token: ${TELEGRAM_BOT_TOKEN}
+    chat_id: ${ALERT_TELEGRAM_CHAT_ID} # a person or a group; several separated by commas
+  email:
+    smtp_host: ${SMTP_HOST}
+    smtp_port: ${SMTP_PORT} # SMTP2GO: 2525 (or 587) with starttls
+    security: ${SMTP_SECURITY} # starttls (default) | ssl (port 465) | none
+    username: ${SMTP_USER}
+    password: ${SMTP_PASSWORD}
+    from: ${SMTP_FROM}
+    to: ${ALERT_EMAIL_TO} # several separated by commas
+
+stations:
+  - id: ${AQMS_STATION_ID} # station_id in the logger's config.yaml
+    name: ${AQMS_STATION_NAME} # friendly name in the messages (optional)
+    offline_minutes: 5 # nothing at all from the station for this long -> OFFLINE
+
+    # A check is OK while ANY of its parameters keeps arriving. Parameters are left out of
+    # the MQTT message when the instrument gave no value, so:
+    #   *_STATUS / MODUS / GC_STATUS arrive whenever the instrument ANSWERS (also while it
+    #   calibrates) -> "not answering" checks
+    #   the gas / PM values themselves are blank during calibration, so give those checks
+    #   enough time for a normal calibration -> "no valid value for hours" checks
+    checks:
+      # --- instrument answering ---
+      - name: Fidas 200 (PM / weather)
+        any_of: [MODUS, FLOW, PM2_5, PM10]
+        minutes: 10
+        hint: Check the Fidas is on and reachable from the station PC (Modbus TCP, port 502).
+      - name: FPI O3 analyzer (AQMS-300)
+        any_of: [O3_STATUS]
+        minutes: 10
+        hint: Check the analyzer is on and reachable from the station PC (TCP port 10000).
+      - name: FPI CO analyzer (AQMS-400)
+        any_of: [CO_STATUS]
+        minutes: 10
+        hint: Check the analyzer is on and reachable from the station PC (TCP port 10000).
+      - name: FPI SO2 analyzer (AQMS-500)
+        any_of: [SO2_STATUS]
+        minutes: 10
+        hint: Check the analyzer is on and reachable from the station PC (TCP port 10000).
+      - name: FPI NOx analyzer (AQMS-600)
+        any_of: [NOX_STATUS]
+        minutes: 10
+        hint: Check the analyzer is on and reachable from the station PC (TCP port 10000).
+      - name: Synspec GC (CH4 / NMHC)
+        any_of: [GC_STATUS]
+        minutes: 15
+        hint: Check the GC PC and GCAlpha are running and MODBUS is on in Datalogger Settings.
+
+      # --- answering, but no valid value for a long time (stuck in calibration, failure
+      #     mode, unit changed, GC stopped). `needs`: held while that instrument is not
+      #     answering, so one fault gives one alert. Its time restarts when it is back. ---
+      - name: PM2.5 value
+        any_of: [PM2_5]
+        minutes: 30
+        needs: Fidas 200 (PM / weather)
+      - name: O3 value
+        any_of: [O3]
+        minutes: 180
+        needs: FPI O3 analyzer (AQMS-300)
+        hint: The analyzer answers but sends no valid O3 - check its status code / unit (ppb).
+      - name: CO value
+        any_of: [CO]
+        minutes: 180
+        needs: FPI CO analyzer (AQMS-400)
+        hint: The analyzer answers but sends no valid CO - check its status code / unit.
+      - name: SO2 value
+        any_of: [SO2]
+        minutes: 180
+        needs: FPI SO2 analyzer (AQMS-500)
+        hint: The analyzer answers but sends no valid SO2 - check its status code / unit (ppb).
+      - name: NO2 value
+        any_of: [NO2]
+        minutes: 180
+        needs: FPI NOx analyzer (AQMS-600)
+        hint: The analyzer answers but sends no valid NO / NO2 - check its status code / unit (ppb).
+      - name: CH4 / NMHC values
+        any_of: [CH4]
+        minutes: 180
+        needs: Synspec GC (CH4 / NMHC)
+        hint: The GC answers but has no valid result - see GC_STATUS (1 stale, 4 calibration, 5 invalid).

@@ -22,14 +22,17 @@ Replacement data pipeline for the TNBJ air-quality station. Instruments are read
   (storage #1), publishes each reading to MQTT with store-and-forward (nothing lost if the link drops).
 - **`ingest/`** — runs on the server. Subscribes to MQTT and upserts into TimescaleDB (storage #2),
   which computes hourly averages via a continuous aggregate.
+- **`watchdog/`** — runs on the server. Watches the same MQTT feed and sends Telegram / email
+  alerts when the station or one of its instruments stops sending, and when it recovers.
 
 ## Status (build phases)
 - [x] 1 — scaffold, config, models, SQLite storage
 - [x] 2 — Modbus-TCP adapter + decoder, Fidas 200 map
 - [x] 3 — MQTT publisher, server ingest, TimescaleDB schema
 - [x] 4 — store-and-forward + backfill
-- [~] 5 — FPI gas source: `fpi_mysql` adapter **built + tested** (needs real AQMS-Plus schema values in config); `hj212_receiver` fallback not built (only if MySQL is unreachable)
-- [~] GC — `synspec_gc` adapter for the Synspec Alpha 115 (CH4 / NMHC measured, THC = CH4 + NMHC calculated; ppb) **built + tested**, read-only; on-site commissioning pending ([docs/commissioning-gc.md](docs/commissioning-gc.md))
+- [x] 5 — FPI gas analyzers (AQMS-300 O3, -400 CO, -500 SO2, -600 NOx) read directly over TCP port 10000 (`fpi_tcp`); the older `fpi_mysql` (AQMS-Plus) adapter is kept as an alternative
+- [x] GC — `synspec_gc` adapter for the Synspec Alpha 115 (CH4 / NMHC measured, THC = CH4 + NMHC calculated; ppb), read-only, commissioned ([docs/commissioning-gc.md](docs/commissioning-gc.md))
+- [x] Monitoring — `python -m aqms_logger.status` health check on the station PC; server `aqms-watchdog` sends Telegram / email alerts ([watchdog/README.md](watchdog/README.md))
 - [ ] 6 — hourly continuous aggregate + 75% validity + retention (schema.sql ready; enable on server)
 - [ ] 7 — service packaging (NSSM / systemd), docs
 
@@ -41,6 +44,11 @@ pip install -r requirements.txt
 cp config.example.yaml config.yaml                # edit device IPs, station_id
 cp .env.example .env                              # put real MQTT/DB secrets here (NOT in git, NOT in OneDrive)
 python -m aqms_logger.main --config config.yaml
+```
+Run it as a Windows service that starts at boot: [logger/deploy/nssm.md](logger/deploy/nssm.md).
+Is it running and getting data from every instrument? (read only, safe while it runs)
+```bash
+python -m aqms_logger.status --config config.yaml
 ```
 
 **Commissioning the Fidas** — follow [docs/commissioning-fidas.md](docs/commissioning-fidas.md). Two helpers:

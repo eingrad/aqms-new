@@ -59,6 +59,32 @@ services:
       - ../ingest/config.example.yaml:/app/config.yaml:ro     # resolves ${AQMS_*} from the env above
     networks: [aqms-net]
 
+  # Telegram / email alerts when a station or an instrument stops sending (../watchdog/README.md).
+  # Start just this one:  docker compose up -d --build aqms-watchdog
+  aqms-watchdog:
+    build: ../watchdog
+    container_name: aqms-watchdog
+    restart: unless-stopped
+    depends_on: [aqms-mqtt]
+    environment:
+      AQMS_MQTT_INGEST_PASSWORD: ${AQMS_MQTT_INGEST_PASSWORD}
+      AQMS_STATION_ID: ${AQMS_STATION_ID}
+      AQMS_STATION_NAME: ${AQMS_STATION_NAME:-}
+      # bot + SMTP: the dashboard's own values (same names); recipients: ALERT_*
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_PASS: ${SMTP_PASS:-}                 # the dashboard's name for it; either works
+      SMTP_FROM: ${SMTP_FROM:-}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+    volumes:
+      - ../watchdog/watchdog.yaml:/app/watchdog.yaml:ro       # resolves ${...} from the env above
+    networks: [aqms-net]
+
   aqms-cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: aqms-cloudflared
